@@ -519,7 +519,7 @@ class App {
     // Load milestones linked to this theme
     const milestonesContainer = document.getElementById('milestonesContainer');
     const milestonesCount = document.getElementById('milestonesCount');
-    milestonesContainer.innerHTML = UI.renderLoading();
+    milestonesContainer.classList.add('loading-overlay');
 
     try {
       // Get the theme issue to read its links
@@ -545,6 +545,7 @@ class App {
 
       if (linkedKeys.length === 0) {
         console.log(`[Hierarchy] No linked keys found — showing empty`);
+        milestonesContainer.classList.remove('loading-overlay');
         milestonesContainer.innerHTML = UI.renderEmpty('🎯', 'Нет связанных milestones');
         milestonesCount.textContent = '';
         return;
@@ -558,9 +559,11 @@ class App {
       data.issues?.forEach(issue => {
         console.log(`[Hierarchy]   milestone: ${issue.key} "${issue.fields?.summary}" labels=[${issue.fields?.labels?.join(',')}]`);
       });
+      milestonesContainer.classList.remove('loading-overlay');
       milestonesCount.textContent = data.total > 0 ? data.total : '';
       this.renderHierarchyList(milestonesContainer, data.issues, 'milestone');
     } catch (err) {
+      milestonesContainer.classList.remove('loading-overlay');
       milestonesContainer.innerHTML = UI.renderError(err.message);
     }
   }
@@ -578,7 +581,9 @@ class App {
 
     const tasksContainer = document.getElementById('hierarchyTasksContainer');
     const tasksCount = document.getElementById('hierarchyTasksCount');
-    tasksContainer.innerHTML = UI.renderLoading();
+
+    // Add loading overlay without removing current content (prevents layout jump)
+    tasksContainer.classList.add('loading-overlay');
 
     try {
       // Get the milestone issue to read its links
@@ -594,6 +599,7 @@ class App {
       }
 
       if (linkedKeys.length === 0) {
+        tasksContainer.classList.remove('loading-overlay');
         tasksContainer.innerHTML = UI.renderEmpty('📋', 'Нет связанных задач');
         tasksCount.textContent = '';
         return;
@@ -602,9 +608,11 @@ class App {
       // Fetch linked issues EXCLUDING themes and milestones
       const jql = `key in (${linkedKeys.join(',')}) AND labels not in (theme, milestone) ORDER BY updated DESC`;
       const data = await jiraAPI.searchIssues(jql, 0, 200);
+      tasksContainer.classList.remove('loading-overlay');
       tasksCount.textContent = data.total > 0 ? data.total : '';
       this.renderHierarchyTasks(tasksContainer, data.issues);
     } catch (err) {
+      tasksContainer.classList.remove('loading-overlay');
       tasksContainer.innerHTML = UI.renderError(err.message);
     }
   }
@@ -800,7 +808,15 @@ class App {
     }
 
     let html = `
-      <table class="issues-table">
+      <table class="issues-table issues-table-fixed">
+        <colgroup>
+          <col style="width: 90px;">
+          <col style="width: 100px;">
+          <col>
+          <col style="width: 120px;">
+          <col style="width: 100px;">
+          <col style="width: 160px;">
+        </colgroup>
         <thead>
           <tr>
             <th>Тип</th>

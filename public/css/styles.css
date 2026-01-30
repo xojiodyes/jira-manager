@@ -388,6 +388,10 @@ a:hover {
   border-collapse: collapse;
 }
 
+.issues-table-fixed {
+  table-layout: fixed;
+}
+
 .issues-table th {
   text-align: left;
   padding: 12px 16px;
@@ -724,24 +728,27 @@ a:hover {
 }
 
 /* Hierarchy View */
-.hierarchy-container {
+.hierarchy-row-top {
   display: flex;
   gap: 16px;
-  align-items: flex-start;
+  margin-bottom: 16px;
 }
 
-.hierarchy-panel {
+.hierarchy-row-top .hierarchy-panel {
   flex: 1;
   min-width: 0;
 }
 
-.hierarchy-panel-wide {
-  flex: 2;
+.hierarchy-row-top .hierarchy-panel .card {
+  margin-bottom: 0;
+  height: calc(50vh - var(--header-height) / 2 - 32px);
+  display: flex;
+  flex-direction: column;
 }
 
-.hierarchy-panel .card {
+.hierarchy-row-bottom .hierarchy-panel-full .card {
   margin-bottom: 0;
-  height: calc(100vh - var(--header-height) - 72px);
+  height: calc(50vh - var(--header-height) / 2 - 32px);
   display: flex;
   flex-direction: column;
 }
@@ -749,6 +756,13 @@ a:hover {
 .hierarchy-panel .card-body {
   flex: 1;
   overflow-y: auto;
+  position: relative;
+  transition: opacity 0.15s;
+}
+
+.hierarchy-panel .card-body.loading-overlay {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 .hierarchy-list {
