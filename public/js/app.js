@@ -118,6 +118,13 @@ class App {
     return '';
   }
 
+  getProjectFromJql() {
+    const jql = this.getSelectedJql();
+    if (!jql) return '';
+    const match = jql.match(/project\s*=\s*['"]?([A-Za-z][A-Za-z0-9_]*)['"]?/i);
+    return match ? match[1].toUpperCase() : '';
+  }
+
   getSelectedLinkType() {
     if (this.selectedJqlIndex >= 0 && this.jqlFilters[this.selectedJqlIndex]) {
       return this.jqlFilters[this.selectedJqlIndex].linkType || 'Part';
@@ -774,6 +781,15 @@ class App {
     `;
 
     container.insertBefore(form, container.firstChild);
+
+    // Pre-fill project key from JQL for themes
+    if (panel === 'themes') {
+      const projectKey = this.getProjectFromJql();
+      if (projectKey) {
+        const projectInput = form.querySelector('#inlineProjectKey');
+        if (projectInput) projectInput.value = projectKey;
+      }
+    }
 
     // Focus summary input
     const summaryInput = form.querySelector('#inlineSummary');
