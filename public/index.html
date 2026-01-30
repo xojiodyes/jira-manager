@@ -16,11 +16,13 @@
           <h2 id="pageTitle">Hierarchy</h2>
         </div>
         <div class="header-right">
-          <div class="connection-indicator" id="connectionIndicator">
-            <span class="status-dot"></span>
-            <span class="status-text">Not connected</span>
+          <div class="jql-selector">
+            <select class="jql-dropdown" id="jqlDropdown">
+              <option value="">— Select JQL —</option>
+            </select>
+            <button class="btn-icon" id="addJqlBtn" title="Add JQL">+</button>
+            <button class="btn-icon btn-icon-danger" id="removeJqlBtn" title="Remove selected JQL" style="display:none;">✕</button>
           </div>
-          <button class="btn-icon" id="settingsBtn" title="Settings">⚙️</button>
         </div>
       </header>
 
@@ -105,37 +107,28 @@
         </div>
       </div>
 
-      <!-- Settings Modal -->
-      <div class="modal" id="settingsModal">
+      <!-- Add JQL Modal -->
+      <div class="modal" id="addJqlModal">
         <div class="modal-backdrop"></div>
         <div class="modal-content">
           <div class="modal-header">
-            <h3>⚙️ Connection Settings</h3>
-            <button class="modal-close" id="closeSettingsModal">✕</button>
+            <h3>Add JQL</h3>
+            <button class="modal-close" id="closeAddJqlModal">✕</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label class="label">Jira Host</label>
-              <input type="text" id="jiraHost" class="input" placeholder="your-domain.atlassian.net">
-              <span class="hint">Your Jira domain (without https://)</span>
+              <label class="label">Name</label>
+              <input type="text" id="jqlName" class="input" placeholder="e.g. My Project Tasks">
             </div>
             <div class="form-group">
-              <label class="label">Email</label>
-              <input type="email" id="email" class="input" placeholder="your-email@company.com">
-            </div>
-            <div class="form-group">
-              <label class="label">API Token</label>
-              <input type="password" id="apiToken" class="input" placeholder="Your API token">
-              <span class="hint">
-                <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank">
-                  Create API token →
-                </a>
-              </span>
+              <label class="label">JQL</label>
+              <input type="text" id="jqlQuery" class="input" placeholder="e.g. project = PROJ ORDER BY updated DESC">
+              <span class="hint">Base JQL for this dashboard. Labels (theme/milestone) are added automatically.</span>
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" id="testConnectionBtn">🔗 Test</button>
-            <button class="btn btn-primary" id="saveSettingsBtn">💾 Save</button>
+            <button class="btn btn-secondary" id="cancelAddJqlBtn">Cancel</button>
+            <button class="btn btn-primary" id="saveJqlBtn">💾 Save</button>
           </div>
         </div>
       </div>

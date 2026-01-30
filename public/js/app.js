@@ -14,6 +14,10 @@ class App {
     // Local data (status, confidence per issue key)
     this.localData = {};
 
+    // JQL filters
+    this.jqlFilters = []; // [{ name, jql }]
+    this.selectedJqlIndex = -1; // -1 = no filter
+
     this.init();
   }
 
@@ -25,9 +29,9 @@ class App {
     // Load local data (status/confidence)
     await this.loadLocalData();
 
+    this.loadJqlFilters();
     this.bindEvents();
-    this.loadSavedState();
-    this.checkConnection();
+    this.updatePageTitle();
     this.loadThemes();
   }
 
@@ -62,22 +66,133 @@ class App {
     return this.localData[issueKey]?.[field] ?? null;
   }
 
+  // === JQL FILTERS ===
+
+  loadJqlFilters() {
+    try {
+      const saved = localStorage.getItem('jqlFilters');
+      if (saved) this.jqlFilters = JSON.parse(saved);
+    } catch (e) {}
+
+    try {
+      const idx = localStorage.getItem('selectedJqlIndex');
+      if (idx !== null) this.selectedJqlIndex = parseInt(idx, 10);
+    } catch (e) {}
+
+    this.renderJqlDropdown();
+  }
+
+  saveJqlFilters() {
+    localStorage.setItem('jqlFilters', JSON.stringify(this.jqlFilters));
+    localStorage.setItem('selectedJqlIndex', String(this.selectedJqlIndex));
+  }
+
+  renderJqlDropdown() {
+    const dropdown = document.getElementById('jqlDropdown');
+    const removeBtn = document.getElementById('removeJqlBtn');
+
+    let html = '<option value="-1">— Select JQL —</option>';
+    this.jqlFilters.forEach((f, i) => {
+      const selected = i === this.selectedJqlIndex ? ' selected' : '';
+      html += `<option value="${i}"${selected}>${UI.escapeHtml(f.name)}</option>`;
+    });
+    dropdown.innerHTML = html;
+
+    // Show/hide remove button
+    removeBtn.style.display = this.selectedJqlIndex >= 0 ? '' : 'none';
+  }
+
+  getSelectedJql() {
+    if (this.selectedJqlIndex >= 0 && this.jqlFilters[this.selectedJqlIndex]) {
+      return this.jqlFilters[this.selectedJqlIndex].jql;
+    }
+    return '';
+  }
+
+  onJqlSelect(index) {
+    this.selectedJqlIndex = index;
+    this.saveJqlFilters();
+    this.renderJqlDropdown();
+    this.updatePageTitle();
+    this.loadThemes();
+  }
+
+  updatePageTitle() {
+    const titleEl = document.getElementById('pageTitle');
+    if (this.selectedJqlIndex >= 0 && this.jqlFilters[this.selectedJqlIndex]) {
+      titleEl.textContent = this.jqlFilters[this.selectedJqlIndex].name;
+    } else {
+      titleEl.textContent = 'Hierarchy';
+    }
+  }
+
+  openAddJqlModal() {
+    document.getElementById('jqlName').value = '';
+    document.getElementById('jqlQuery').value = '';
+    UI.openModal('addJqlModal');
+    document.getElementById('jqlName').focus();
+  }
+
+  saveNewJql() {
+    const name = document.getElementById('jqlName').value.trim();
+    const jql = document.getElementById('jqlQuery').value.trim();
+
+    if (!name) {
+      UI.toast('Enter a name', 'error');
+      return;
+    }
+    if (!jql) {
+      UI.toast('Enter a JQL query', 'error');
+      return;
+    }
+
+    this.jqlFilters.push({ name, jql });
+    this.selectedJqlIndex = this.jqlFilters.length - 1;
+    this.saveJqlFilters();
+    this.renderJqlDropdown();
+    this.updatePageTitle();
+    UI.closeModal('addJqlModal');
+    this.loadThemes();
+    UI.toast(`JQL "${name}" added`, 'success');
+  }
+
+  removeSelectedJql() {
+    if (this.selectedJqlIndex < 0) return;
+    const name = this.jqlFilters[this.selectedJqlIndex].name;
+    this.jqlFilters.splice(this.selectedJqlIndex, 1);
+    this.selectedJqlIndex = -1;
+    this.saveJqlFilters();
+    this.renderJqlDropdown();
+    this.updatePageTitle();
+    this.loadThemes();
+    UI.toast(`JQL "${name}" removed`, 'success');
+  }
+
   bindEvents() {
-    // Settings modal
-    document.getElementById('settingsBtn').addEventListener('click', () => {
-      this.openSettings();
+    // JQL selector
+    document.getElementById('jqlDropdown').addEventListener('change', (e) => {
+      this.onJqlSelect(parseInt(e.target.value, 10));
     });
 
-    document.getElementById('closeSettingsModal').addEventListener('click', () => {
-      UI.closeModal('settingsModal');
+    document.getElementById('addJqlBtn').addEventListener('click', () => {
+      this.openAddJqlModal();
     });
 
-    document.getElementById('testConnectionBtn').addEventListener('click', () => {
-      this.testConnection();
+    document.getElementById('removeJqlBtn').addEventListener('click', () => {
+      this.removeSelectedJql();
     });
 
-    document.getElementById('saveSettingsBtn').addEventListener('click', () => {
-      this.saveSettings();
+    // Add JQL modal
+    document.getElementById('closeAddJqlModal').addEventListener('click', () => {
+      UI.closeModal('addJqlModal');
+    });
+
+    document.getElementById('cancelAddJqlBtn').addEventListener('click', () => {
+      UI.closeModal('addJqlModal');
+    });
+
+    document.getElementById('saveJqlBtn').addEventListener('click', () => {
+      this.saveNewJql();
     });
 
     // Issue modal
@@ -111,104 +226,6 @@ class App {
         });
       }
     });
-  }
-
-  switchView(viewName) {
-    this.currentView = viewName;
-
-    // Update nav
-    document.querySelectorAll('.nav-item[data-view]').forEach(item => {
-      item.classList.toggle('active', item.dataset.view === viewName);
-    });
-
-    // Update views
-    document.querySelectorAll('.view').forEach(view => {
-      view.classList.remove('active');
-    });
-    const viewEl = document.getElementById(viewName + 'View');
-    if (viewEl) viewEl.classList.add('active');
-
-    // Update title
-    const titles = { hierarchy: 'Hierarchy' };
-    document.getElementById('pageTitle').textContent = titles[viewName] || viewName;
-
-    // Load hierarchy data on switch
-    if (viewName === 'hierarchy') {
-      this.loadThemes();
-    }
-  }
-
-  loadSavedState() {
-    // Load credentials into form
-    const creds = jiraAPI.getCredentials();
-    if (creds) {
-      document.getElementById('jiraHost').value = creds.host || '';
-      document.getElementById('email').value = creds.email || '';
-      document.getElementById('apiToken').value = creds.token || '';
-    }
-  }
-
-  async checkConnection() {
-    if (!jiraAPI.isConfigured()) {
-      UI.updateConnectionStatus(null, 'Not configured');
-      return;
-    }
-
-    try {
-      const user = await jiraAPI.testConnection();
-      UI.updateConnectionStatus(true, user.displayName);
-    } catch (err) {
-      UI.updateConnectionStatus(false, 'Connection error');
-    }
-  }
-
-  openSettings() {
-    const creds = jiraAPI.getCredentials();
-    if (creds) {
-      document.getElementById('jiraHost').value = creds.host || '';
-      document.getElementById('email').value = creds.email || '';
-      document.getElementById('apiToken').value = creds.token || '';
-    }
-    UI.openModal('settingsModal');
-  }
-
-  async testConnection() {
-    const host = document.getElementById('jiraHost').value.trim();
-    const email = document.getElementById('email').value.trim();
-    const token = document.getElementById('apiToken').value.trim();
-
-    if (!host || !email || !token) {
-      UI.toast('Please fill in all fields', 'error');
-      return;
-    }
-
-    // Temporarily save for testing
-    jiraAPI.saveCredentials(host, email, token);
-
-    try {
-      const user = await jiraAPI.testConnection();
-      UI.toast(`Connected as ${user.displayName}`, 'success');
-      UI.updateConnectionStatus(true, user.displayName);
-    } catch (err) {
-      UI.toast(`Error: ${err.message}`, 'error');
-      UI.updateConnectionStatus(false, 'Connection error');
-    }
-  }
-
-  saveSettings() {
-    const host = document.getElementById('jiraHost').value.trim();
-    const email = document.getElementById('email').value.trim();
-    const token = document.getElementById('apiToken').value.trim();
-
-    if (!host || !email || !token) {
-      UI.toast('Please fill in all fields', 'error');
-      return;
-    }
-
-    jiraAPI.saveCredentials(host, email, token);
-    UI.toast('Settings saved', 'success');
-    UI.closeModal('settingsModal');
-    this.checkConnection();
   }
 
   async showIssueDetail(issueKey) {
@@ -384,8 +401,8 @@ class App {
     document.getElementById('hierarchyTasksCount').textContent = '';
 
     try {
-      // Always filter by label "theme"; user JQL from config adds extra conditions
-      const userJql = this.serverConfig?.hierarchyJql || '';
+      // Always filter by label "theme"; combine with selected JQL filter or server config
+      const userJql = this.getSelectedJql() || this.serverConfig?.hierarchyJql || '';
       let hierarchyJql;
       if (userJql) {
         // Insert "labels = theme AND" before user JQL, preserve ORDER BY if present
