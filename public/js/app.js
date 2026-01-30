@@ -114,9 +114,9 @@ class App {
 
   getSelectedLinkType() {
     if (this.selectedJqlIndex >= 0 && this.jqlFilters[this.selectedJqlIndex]) {
-      return this.jqlFilters[this.selectedJqlIndex].linkType || 'Relates';
+      return this.jqlFilters[this.selectedJqlIndex].linkType || 'Part';
     }
-    return 'Relates';
+    return 'Part';
   }
 
   onJqlSelect(index) {
@@ -172,7 +172,7 @@ class App {
       return;
     }
 
-    const entry = { name, jql, linkType: linkType || 'Relates' };
+    const entry = { name, jql, linkType: linkType || 'Part' };
 
     if (this._editingJqlIndex >= 0) {
       // Edit existing
