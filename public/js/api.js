@@ -94,10 +94,11 @@ class JiraAPI {
       }
     });
 
-    const data = await response.json();
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : null;
 
     if (!response.ok) {
-      const errorMsg = data.errorMessages?.join(', ') || data.message || `HTTP ${response.status}`;
+      const errorMsg = data?.errorMessages?.join(', ') || data?.message || `HTTP ${response.status}`;
       throw new Error(errorMsg);
     }
 
