@@ -19,7 +19,7 @@ if (MODE === 'real') {
     // Support both 'jiraUser' and 'email' field names
     CONFIG.jiraUser = CONFIG.jiraUser || CONFIG.email;
     if (!CONFIG.jiraHost || !CONFIG.jiraUser || !CONFIG.apiToken) {
-      console.error('config.json должен содержать: jiraHost, jiraUser, apiToken');
+      console.error('config.json must contain: jiraHost, jiraUser, apiToken');
       process.exit(1);
     }
     // Normalize jiraHost: parse full URL to extract hostname + basePath
@@ -34,10 +34,36 @@ if (MODE === 'real') {
     CONFIG._protocol = parsedHost.protocol;
     CONFIG._basePath = parsedHost.pathname.replace(/\/+$/, ''); // e.g. "/jira02" or ""
   } catch (err) {
-    console.error(`Не удалось прочитать ${configPath}: ${err.message}`);
-    console.error('Скопируйте config.example.json в config.json и заполните данные.');
+    console.error(`Failed to read ${configPath}: ${err.message}`);
+    console.error('Copy config.example.json to config.json and fill in your credentials.');
     process.exit(1);
   }
+}
+
+// Local data storage (status, confidence per issue) with history
+const DATA_FILE = path.join(__dirname, 'data.json');
+let LOCAL_DATA = { issues: {}, history: [] };
+try {
+  const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+  // Support migration from old flat format
+  if (raw.issues) {
+    LOCAL_DATA = raw;
+    if (!LOCAL_DATA.history) LOCAL_DATA.history = [];
+  } else {
+    // Old format: flat { "KEY-1": { ... } } → migrate
+    LOCAL_DATA = { issues: raw, history: [] };
+  }
+} catch (e) {
+  // File doesn't exist yet — start empty
+}
+
+function saveLocalData() {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(LOCAL_DATA, null, 2), 'utf8');
+}
+
+function getCurrentUser() {
+  if (CONFIG && CONFIG.jiraUser) return CONFIG.jiraUser;
+  return 'mock-user';
 }
 
 // MIME types for static files
@@ -171,6 +197,62 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Local data API — GET all issues data, POST update single field with history
+  if (pathname === '/api/data' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(LOCAL_DATA.issues));
+    return;
+  }
+
+  if (pathname === '/api/data' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', () => {
+      try {
+        const { issueKey, field, value } = JSON.parse(body);
+        if (!issueKey || !field) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'issueKey and field required' }));
+          return;
+        }
+        if (!LOCAL_DATA.issues[issueKey]) LOCAL_DATA.issues[issueKey] = {};
+        const oldValue = LOCAL_DATA.issues[issueKey][field] ?? null;
+        LOCAL_DATA.issues[issueKey][field] = value;
+
+        // Record history entry
+        LOCAL_DATA.history.push({
+          issueKey,
+          field,
+          oldValue,
+          newValue: value,
+          user: getCurrentUser(),
+          timestamp: new Date().toISOString()
+        });
+
+        saveLocalData();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, data: LOCAL_DATA.issues[issueKey] }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // History API — GET history for a specific issue or all
+  if (pathname.startsWith('/api/data/history') && req.method === 'GET') {
+    const parts = pathname.split('/');
+    const issueKey = parts[4] || null; // /api/data/history/KEY-1
+    let history = LOCAL_DATA.history;
+    if (issueKey) {
+      history = history.filter(h => h.issueKey === issueKey);
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(history));
+    return;
+  }
+
   // API routes
   if (pathname.startsWith('/api/jira')) {
     const jiraPath = pathname.replace('/api/jira', '');
@@ -210,10 +292,10 @@ server.listen(PORT, () => {
   console.log('');
   console.log('┌─────────────────────────────────────────┐');
   console.log('│                                         │');
-  console.log('│   Jira Manager запущен                  │');
+  console.log('│   Jira Manager started                  │');
   console.log('│                                         │');
   console.log(`│   http://localhost:${PORT}                  │`);
-  console.log(`│   Режим: ${MODE === 'mock' ? 'MOCK (тестовые данные)' : 'REAL (' + CONFIG.jiraHost + ')'}`.padEnd(42) + '│');
+  console.log(`│   Mode: ${MODE === 'mock' ? 'MOCK (test data)' : 'REAL (' + CONFIG.jiraHost + ')'}`.padEnd(42) + '│');
   console.log('│                                         │');
   console.log('└─────────────────────────────────────────┘');
   console.log('');

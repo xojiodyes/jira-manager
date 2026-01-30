@@ -81,7 +81,7 @@ class JiraAPI {
     const host = this.getHost();
 
     if (!auth || !host) {
-      throw new Error('Не настроено подключение к Jira');
+      throw new Error('Jira connection not configured');
     }
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, {

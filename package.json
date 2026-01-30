@@ -1,7 +1,7 @@
 {
   "name": "jira-manager",
   "version": "0.1.0",
-  "description": "Web UI система для работы с задачами Jira",
+  "description": "Web UI for Jira task management",
   "main": "server.js",
   "scripts": {
     "start": "MODE=real node server.js",

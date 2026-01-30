@@ -1,4 +1,4 @@
 #!/bin/bash
-# Запуск Jira Manager в режиме MOCK (тестовые данные)
+# Start Jira Manager in MOCK mode (test data)
 cd "$(dirname "$0")"
 MODE=mock node server.js

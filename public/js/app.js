@@ -3,16 +3,16 @@
  */
 class App {
   constructor() {
-    this.currentPage = 0;
-    this.pageSize = 50;
-    this.totalIssues = 0;
-    this.currentView = 'search';
+    this.currentView = 'hierarchy';
 
     // Hierarchy state
     this.selectedThemeKey = null;
     this.selectedThemeProject = null;
     this.selectedMilestoneKey = null;
     this.selectedMilestoneProject = null;
+
+    // Local data (status, confidence per issue key)
+    this.localData = {};
 
     this.init();
   }
@@ -22,9 +22,44 @@ class App {
     await window.jiraConfigReady;
     this.serverConfig = window.jiraAPI.serverConfig || {};
 
+    // Load local data (status/confidence)
+    await this.loadLocalData();
+
     this.bindEvents();
     this.loadSavedState();
     this.checkConnection();
+    this.loadThemes();
+  }
+
+  async loadLocalData() {
+    try {
+      const res = await fetch('/api/data');
+      this.localData = await res.json();
+    } catch (err) {
+      console.error('Failed to load local data:', err);
+      this.localData = {};
+    }
+  }
+
+  async saveLocalField(issueKey, field, value) {
+    try {
+      const res = await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issueKey, field, value })
+      });
+      const result = await res.json();
+      if (result.ok) {
+        if (!this.localData[issueKey]) this.localData[issueKey] = {};
+        this.localData[issueKey][field] = value;
+      }
+    } catch (err) {
+      console.error('Failed to save local data:', err);
+    }
+  }
+
+  getLocalField(issueKey, field) {
+    return this.localData[issueKey]?.[field] ?? null;
   }
 
   bindEvents() {
@@ -48,33 +83,6 @@ class App {
     // Issue modal
     document.getElementById('closeIssueModal').addEventListener('click', () => {
       UI.closeModal('issueModal');
-    });
-
-    // Search
-    document.getElementById('searchBtn').addEventListener('click', () => {
-      this.search();
-    });
-
-    document.getElementById('jqlInput').addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') this.search();
-    });
-
-    // Quick filters
-    document.querySelectorAll('.chip[data-jql]').forEach(chip => {
-      chip.addEventListener('click', () => {
-        document.getElementById('jqlInput').value = chip.dataset.jql;
-        this.search();
-      });
-    });
-
-    // Nav view switching
-    document.querySelectorAll('.nav-item[data-view]').forEach(item => {
-      item.addEventListener('click', (e) => {
-        e.preventDefault();
-        const view = item.dataset.view;
-        if (item.classList.contains('disabled')) return;
-        this.switchView(view);
-      });
     });
 
     // Hierarchy create buttons
@@ -121,7 +129,7 @@ class App {
     if (viewEl) viewEl.classList.add('active');
 
     // Update title
-    const titles = { search: 'Поиск задач', hierarchy: 'Иерархия задач' };
+    const titles = { hierarchy: 'Hierarchy' };
     document.getElementById('pageTitle').textContent = titles[viewName] || viewName;
 
     // Load hierarchy data on switch
@@ -138,17 +146,11 @@ class App {
       document.getElementById('email').value = creds.email || '';
       document.getElementById('apiToken').value = creds.token || '';
     }
-
-    // Load last JQL
-    const savedJql = localStorage.getItem('lastJQL');
-    if (savedJql) {
-      document.getElementById('jqlInput').value = savedJql;
-    }
   }
 
   async checkConnection() {
     if (!jiraAPI.isConfigured()) {
-      UI.updateConnectionStatus(null, 'Не настроено');
+      UI.updateConnectionStatus(null, 'Not configured');
       return;
     }
 
@@ -156,7 +158,7 @@ class App {
       const user = await jiraAPI.testConnection();
       UI.updateConnectionStatus(true, user.displayName);
     } catch (err) {
-      UI.updateConnectionStatus(false, 'Ошибка подключения');
+      UI.updateConnectionStatus(false, 'Connection error');
     }
   }
 
@@ -176,7 +178,7 @@ class App {
     const token = document.getElementById('apiToken').value.trim();
 
     if (!host || !email || !token) {
-      UI.toast('Заполните все поля', 'error');
+      UI.toast('Please fill in all fields', 'error');
       return;
     }
 
@@ -185,11 +187,11 @@ class App {
 
     try {
       const user = await jiraAPI.testConnection();
-      UI.toast(`Подключено как ${user.displayName}`, 'success');
+      UI.toast(`Connected as ${user.displayName}`, 'success');
       UI.updateConnectionStatus(true, user.displayName);
     } catch (err) {
-      UI.toast(`Ошибка: ${err.message}`, 'error');
-      UI.updateConnectionStatus(false, 'Ошибка подключения');
+      UI.toast(`Error: ${err.message}`, 'error');
+      UI.updateConnectionStatus(false, 'Connection error');
     }
   }
 
@@ -199,151 +201,14 @@ class App {
     const token = document.getElementById('apiToken').value.trim();
 
     if (!host || !email || !token) {
-      UI.toast('Заполните все поля', 'error');
+      UI.toast('Please fill in all fields', 'error');
       return;
     }
 
     jiraAPI.saveCredentials(host, email, token);
-    UI.toast('Настройки сохранены', 'success');
+    UI.toast('Settings saved', 'success');
     UI.closeModal('settingsModal');
     this.checkConnection();
-  }
-
-  async search(startAt = 0) {
-    const jql = document.getElementById('jqlInput').value.trim();
-
-    if (!jql) {
-      UI.toast('Введите JQL запрос', 'error');
-      return;
-    }
-
-    if (!jiraAPI.isConfigured()) {
-      UI.toast('Сначала настройте подключение', 'error');
-      this.openSettings();
-      return;
-    }
-
-    // Save JQL
-    localStorage.setItem('lastJQL', jql);
-    this.currentPage = Math.floor(startAt / this.pageSize);
-
-    const container = document.getElementById('resultsContainer');
-    container.innerHTML = UI.renderLoading();
-
-    const searchBtn = document.getElementById('searchBtn');
-    searchBtn.disabled = true;
-
-    try {
-      const data = await jiraAPI.searchIssues(jql, startAt, this.pageSize);
-      this.totalIssues = data.total;
-      this.renderResults(data);
-    } catch (err) {
-      container.innerHTML = UI.renderError(err.message);
-    } finally {
-      searchBtn.disabled = false;
-    }
-  }
-
-  renderResults(data) {
-    const container = document.getElementById('resultsContainer');
-    const countEl = document.getElementById('resultsCount');
-
-    const startAt = this.currentPage * this.pageSize;
-    const endAt = Math.min(startAt + this.pageSize, data.total);
-    countEl.textContent = data.total > 0
-      ? `${startAt + 1}-${endAt} из ${data.total}`
-      : '';
-
-    if (data.issues.length === 0) {
-      container.innerHTML = UI.renderEmpty('📭', 'Задачи не найдены');
-      return;
-    }
-
-    let html = `
-      <table class="issues-table">
-        <thead>
-          <tr>
-            <th>Тип</th>
-            <th>Ключ</th>
-            <th>Название</th>
-            <th>Статус</th>
-            <th>Приоритет</th>
-            <th>Исполнитель</th>
-            <th>Обновлено</th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
-
-    for (const issue of data.issues) {
-      const f = issue.fields;
-      const statusClass = UI.getStatusClass(f.status?.statusCategory?.key);
-
-      html += `
-        <tr>
-          <td>
-            <span class="issue-type">
-              ${f.issuetype?.iconUrl ? `<img src="${f.issuetype.iconUrl}" class="issue-type-icon" alt="">` : ''}
-              ${UI.escapeHtml(f.issuetype?.name || '-')}
-            </span>
-          </td>
-          <td>
-            <span class="issue-key" data-key="${issue.key}">${issue.key}</span>
-          </td>
-          <td>
-            <div class="issue-summary" title="${UI.escapeHtml(f.summary)}">${UI.escapeHtml(f.summary || '-')}</div>
-          </td>
-          <td>
-            <span class="status-badge ${statusClass}">${UI.escapeHtml(f.status?.name || '-')}</span>
-          </td>
-          <td>
-            ${f.priority?.iconUrl
-              ? `<img src="${f.priority.iconUrl}" class="priority-icon" alt="${UI.escapeHtml(f.priority.name)}" title="${UI.escapeHtml(f.priority.name)}">`
-              : UI.escapeHtml(f.priority?.name || '-')}
-          </td>
-          <td>
-            ${f.assignee
-              ? `<span class="assignee">
-                  <img src="${f.assignee.avatarUrls?.['24x24'] || ''}" class="assignee-avatar" alt="">
-                  ${UI.escapeHtml(f.assignee.displayName)}
-                </span>`
-              : '<span class="assignee-unassigned">Не назначен</span>'}
-          </td>
-          <td style="white-space: nowrap; color: var(--color-text-secondary); font-size: 13px;">
-            ${UI.formatRelativeDate(f.updated)}
-          </td>
-        </tr>
-      `;
-    }
-
-    html += '</tbody></table>';
-
-    // Pagination
-    if (data.total > this.pageSize) {
-      const totalPages = Math.ceil(data.total / this.pageSize);
-      html += `
-        <div class="pagination">
-          <span class="pagination-info">Страница ${this.currentPage + 1} из ${totalPages}</span>
-          <div class="pagination-buttons">
-            <button class="btn btn-secondary btn-sm" onclick="app.search(${Math.max(0, (this.currentPage - 1) * this.pageSize)})" ${this.currentPage === 0 ? 'disabled' : ''}>
-              ← Назад
-            </button>
-            <button class="btn btn-secondary btn-sm" onclick="app.search(${(this.currentPage + 1) * this.pageSize})" ${(this.currentPage + 1) * this.pageSize >= data.total ? 'disabled' : ''}>
-              Вперед →
-            </button>
-          </div>
-        </div>
-      `;
-    }
-
-    container.innerHTML = html;
-
-    // Bind click handlers for issue keys
-    container.querySelectorAll('.issue-key').forEach(el => {
-      el.addEventListener('click', () => {
-        this.showIssueDetail(el.dataset.key);
-      });
-    });
   }
 
   async showIssueDetail(issueKey) {
@@ -356,14 +221,17 @@ class App {
     bodyEl.innerHTML = UI.renderLoading();
 
     try {
-      const issue = await jiraAPI.getIssue(issueKey);
-      this.renderIssueDetail(issue);
+      const [issue, history] = await Promise.all([
+        jiraAPI.getIssue(issueKey),
+        this.loadHistory(issueKey)
+      ]);
+      this.renderIssueDetail(issue, history);
     } catch (err) {
       bodyEl.innerHTML = UI.renderError(err.message);
     }
   }
 
-  renderIssueDetail(issue) {
+  renderIssueDetail(issue, history = []) {
     const titleEl = document.getElementById('issueModalTitle');
     const bodyEl = document.getElementById('issueModalBody');
     const f = issue.fields;
@@ -382,61 +250,97 @@ class App {
 
         <div class="issue-detail-meta">
           <div class="issue-meta-item">
-            <span class="issue-meta-label">Статус</span>
+            <span class="issue-meta-label">Status</span>
             <span class="status-badge ${statusClass}">${UI.escapeHtml(f.status?.name)}</span>
           </div>
           <div class="issue-meta-item">
-            <span class="issue-meta-label">Тип</span>
+            <span class="issue-meta-label">Type</span>
             <span class="issue-type">
               ${f.issuetype?.iconUrl ? `<img src="${f.issuetype.iconUrl}" class="issue-type-icon" alt="">` : ''}
               ${UI.escapeHtml(f.issuetype?.name)}
             </span>
           </div>
           <div class="issue-meta-item">
-            <span class="issue-meta-label">Приоритет</span>
+            <span class="issue-meta-label">Priority</span>
             <span>
               ${f.priority?.iconUrl ? `<img src="${f.priority.iconUrl}" class="priority-icon" alt="">` : ''}
               ${UI.escapeHtml(f.priority?.name)}
             </span>
           </div>
           <div class="issue-meta-item">
-            <span class="issue-meta-label">Исполнитель</span>
+            <span class="issue-meta-label">Assignee</span>
             ${f.assignee
               ? `<span class="assignee">
                   <img src="${f.assignee.avatarUrls?.['24x24'] || ''}" class="assignee-avatar" alt="">
                   ${UI.escapeHtml(f.assignee.displayName)}
                 </span>`
-              : '<span class="assignee-unassigned">Не назначен</span>'}
+              : '<span class="assignee-unassigned">Unassigned</span>'}
           </div>
         </div>
       </div>
 
       <div class="issue-detail-section">
-        <h4>Описание</h4>
+        <h4>Description</h4>
         ${UI.wikiToHtml(f.description)}
       </div>
 
       <div class="issue-detail-section">
-        <h4>Информация</h4>
+        <h4>Details</h4>
         <div class="issue-detail-meta">
           <div class="issue-meta-item">
-            <span class="issue-meta-label">Проект</span>
+            <span class="issue-meta-label">Project</span>
             <span>${UI.escapeHtml(f.project?.name)}</span>
           </div>
           <div class="issue-meta-item">
-            <span class="issue-meta-label">Создано</span>
+            <span class="issue-meta-label">Created</span>
             <span>${UI.formatDate(f.created)}</span>
           </div>
           <div class="issue-meta-item">
-            <span class="issue-meta-label">Обновлено</span>
+            <span class="issue-meta-label">Updated</span>
             <span>${UI.formatDate(f.updated)}</span>
           </div>
         </div>
       </div>
 
+      <div class="issue-detail-section">
+        <h4>Local Data</h4>
+        <div class="issue-detail-meta">
+          <div class="issue-meta-item">
+            <span class="issue-meta-label">Status (%)</span>
+            <span class="editable-field editable-status" data-key="${issue.key}" data-field="status" title="Status (0-100)">${this.getLocalField(issue.key, 'status') !== null ? this.getLocalField(issue.key, 'status') + '%' : '—'}</span>
+          </div>
+          <div class="issue-meta-item">
+            <span class="issue-meta-label">Confidence (%)</span>
+            <span class="editable-field editable-confidence" data-key="${issue.key}" data-field="confidence" title="Confidence (0-100)">${this.getLocalField(issue.key, 'confidence') !== null ? this.getLocalField(issue.key, 'confidence') + '%' : '—'}</span>
+          </div>
+        </div>
+      </div>
+
+      ${history.length ? `
+        <div class="issue-detail-section">
+          <h4>Change History (${history.length})</h4>
+          <div class="history-list">
+            ${history.slice().reverse().map(h => `
+              <div class="history-entry">
+                <div class="history-entry-header">
+                  <strong>${UI.escapeHtml(h.user)}</strong>
+                  <span class="history-date">${UI.formatDate(h.timestamp)}</span>
+                </div>
+                <div class="history-entry-body">
+                  <span class="history-field-name">${h.field === 'status' ? 'Status' : 'Confidence'}</span>:
+                  <span class="history-old-value">${h.oldValue !== null ? h.oldValue + '%' : '—'}</span>
+                  &rarr;
+                  <span class="history-new-value">${h.newValue !== null ? h.newValue + '%' : '—'}</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+
       ${f.comment?.comments?.length ? `
         <div class="issue-detail-section">
-          <h4>Комментарии (${f.comment.total})</h4>
+          <h4>Comments (${f.comment.total})</h4>
           ${f.comment.comments.slice(-5).map(c => `
             <div style="margin-bottom: 16px; padding: 12px; background: var(--color-bg); border-radius: var(--radius-sm);">
               <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
@@ -450,6 +354,14 @@ class App {
         </div>
       ` : ''}
     `;
+
+    // Bind editable fields in modal
+    bodyEl.querySelectorAll('.editable-field').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.startInlineEdit(el);
+      });
+    });
   }
 
   // === HIERARCHY ===
@@ -466,9 +378,9 @@ class App {
     this.selectedMilestoneProject = null;
     document.getElementById('addMilestoneBtn').disabled = true;
     document.getElementById('addTaskBtn').disabled = true;
-    document.getElementById('milestonesContainer').innerHTML = UI.renderEmpty('🎯', 'Выберите Theme');
+    document.getElementById('milestonesContainer').innerHTML = UI.renderEmpty('🎯', 'Select a Theme');
     document.getElementById('milestonesCount').textContent = '';
-    document.getElementById('hierarchyTasksContainer').innerHTML = UI.renderEmpty('📋', 'Выберите Milestone');
+    document.getElementById('hierarchyTasksContainer').innerHTML = UI.renderEmpty('📋', 'Select a Milestone');
     document.getElementById('hierarchyTasksCount').textContent = '';
 
     try {
@@ -513,7 +425,7 @@ class App {
     document.getElementById('addTaskBtn').disabled = true;
 
     // Reset tasks panel
-    document.getElementById('hierarchyTasksContainer').innerHTML = UI.renderEmpty('📋', 'Выберите Milestone');
+    document.getElementById('hierarchyTasksContainer').innerHTML = UI.renderEmpty('📋', 'Select a Milestone');
     document.getElementById('hierarchyTasksCount').textContent = '';
 
     // Load milestones linked to this theme
@@ -546,7 +458,7 @@ class App {
       if (linkedKeys.length === 0) {
         console.log(`[Hierarchy] No linked keys found — showing empty`);
         milestonesContainer.classList.remove('loading-overlay');
-        milestonesContainer.innerHTML = UI.renderEmpty('🎯', 'Нет связанных milestones');
+        milestonesContainer.innerHTML = UI.renderEmpty('🎯', 'No linked milestones');
         milestonesCount.textContent = '';
         return;
       }
@@ -600,7 +512,7 @@ class App {
 
       if (linkedKeys.length === 0) {
         tasksContainer.classList.remove('loading-overlay');
-        tasksContainer.innerHTML = UI.renderEmpty('📋', 'Нет связанных задач');
+        tasksContainer.innerHTML = UI.renderEmpty('📋', 'No linked tasks');
         tasksCount.textContent = '';
         return;
       }
@@ -620,32 +532,44 @@ class App {
   renderHierarchyList(container, issues, level) {
     if (issues.length === 0) {
       const icons = { theme: '🏗️', milestone: '🎯' };
-      const msgs = { theme: 'Нет themes', milestone: 'Нет milestones' };
+      const msgs = { theme: 'No themes', milestone: 'No milestones' };
       container.innerHTML = UI.renderEmpty(icons[level], msgs[level]);
       return;
     }
 
-    let html = '<div class="hierarchy-list">';
+    let html = `<div class="hierarchy-list">
+      <div class="hierarchy-list-header">
+        <span class="hlh-key">Key</span>
+        <span class="hlh-summary">Summary</span>
+        <span class="hlh-field">Status</span>
+        <span class="hlh-field">Confid.</span>
+        <span class="hlh-count">Items</span>
+        <span class="hlh-link"></span>
+      </div>`;
     for (const issue of issues) {
       const f = issue.fields;
       // Count child items: only outward links (where this issue is parent),
       // excluding clone-type links
       const EXCLUDED_LINK_TYPES = ['cloners', 'duplicate'];
       const childCount = (f.issuelinks || []).filter(link => {
-        // Must be an outward link (this issue is the source/parent)
         if (!link.outwardIssue) return false;
-        // Exclude clone and duplicate link types
         const typeName = (link.type?.name || '').toLowerCase();
         if (EXCLUDED_LINK_TYPES.some(ex => typeName.includes(ex))) return false;
         return true;
       }).length;
+
+      const status = this.getLocalField(issue.key, 'status');
+      const confidence = this.getLocalField(issue.key, 'confidence');
 
       html += `
         <div class="hierarchy-row" data-key="${issue.key}" data-level="${level}">
           <div class="hierarchy-row-main">
             <span class="issue-key" data-key="${issue.key}">${issue.key}</span>
             <span class="hierarchy-summary">${UI.escapeHtml(f.summary)}</span>
-            <span class="hierarchy-items-count" title="Дочерних элементов">${childCount}</span>
+            <span class="editable-field editable-status" data-key="${issue.key}" data-field="status" title="Status (0-100)">${status !== null ? status + '%' : '—'}</span>
+            <span class="editable-field editable-confidence" data-key="${issue.key}" data-field="confidence" title="Confidence (0-100)">${confidence !== null ? confidence + '%' : '—'}</span>
+            <span class="hierarchy-items-count" title="Child items">${childCount}</span>
+            <a href="${jiraAPI.getIssueUrl(issue.key)}" target="_blank" class="hierarchy-jira-link" title="Open in Jira" onclick="event.stopPropagation()">↗</a>
           </div>
         </div>
       `;
@@ -656,6 +580,12 @@ class App {
     // Bind click handlers
     container.querySelectorAll('.hierarchy-row').forEach(row => {
       row.addEventListener('click', (e) => {
+        // If clicking on editable field, handle inline edit
+        if (e.target.classList.contains('editable-field')) {
+          e.stopPropagation();
+          this.startInlineEdit(e.target);
+          return;
+        }
         // If clicking on issue key specifically, open detail modal
         if (e.target.classList.contains('issue-key')) {
           this.showIssueDetail(e.target.dataset.key);
@@ -697,7 +627,7 @@ class App {
     // For themes: project dropdown needed
     if (panel === 'themes') {
       extraFields = `
-        <input type="text" class="input input-sm inline-project-input" placeholder="Project key (напр. PROJ)" id="inlineProjectKey">
+        <input type="text" class="input input-sm inline-project-input" placeholder="Project key (e.g. PROJ)" id="inlineProjectKey">
       `;
     }
 
@@ -717,8 +647,8 @@ class App {
       <div class="inline-form-row">
         <input type="text" class="input input-sm inline-summary-input" placeholder="Summary" id="inlineSummary" autofocus>
         ${extraFields}
-        <button class="btn-icon btn-confirm" id="inlineConfirm" title="Создать">&#10003;</button>
-        <button class="btn-icon btn-cancel" id="inlineCancel" title="Отмена">&#10005;</button>
+        <button class="btn-icon btn-confirm" id="inlineConfirm" title="Create">&#10003;</button>
+        <button class="btn-icon btn-cancel" id="inlineCancel" title="Cancel">&#10005;</button>
       </div>
     `;
 
@@ -744,7 +674,7 @@ class App {
   async submitInlineForm(panel) {
     const summary = document.getElementById('inlineSummary')?.value.trim();
     if (!summary) {
-      UI.toast('Введите Summary', 'error');
+      UI.toast('Enter a Summary', 'error');
       return;
     }
 
@@ -757,19 +687,19 @@ class App {
         await this.createTask(summary);
       }
     } catch (err) {
-      UI.toast(`Ошибка: ${err.message}`, 'error');
+      UI.toast(`Error: ${err.message}`, 'error');
     }
   }
 
   async createTheme(summary) {
     const projectKey = document.getElementById('inlineProjectKey')?.value.trim();
     if (!projectKey) {
-      UI.toast('Введите Project key', 'error');
+      UI.toast('Enter a Project key', 'error');
       return;
     }
 
     const result = await jiraAPI.createIssue(projectKey, summary, 'Story', ['theme']);
-    UI.toast(`Theme ${result.key} создан`, 'success');
+    UI.toast(`Theme ${result.key} created`, 'success');
 
     // Reload themes
     await this.loadThemes();
@@ -777,7 +707,7 @@ class App {
 
   async createMilestone(summary) {
     if (!this.selectedThemeKey || !this.selectedThemeProject) {
-      UI.toast('Сначала выберите Theme', 'error');
+      UI.toast('Select a Theme first', 'error');
       return;
     }
 
@@ -786,7 +716,7 @@ class App {
 
     // Link milestone to theme
     await jiraAPI.createIssueLink(this.selectedThemeKey, result.key, 'Hierarchy');
-    UI.toast(`Milestone ${result.key} создан`, 'success');
+    UI.toast(`Milestone ${result.key} created`, 'success');
 
     // Reload milestones for current theme
     await this.selectTheme(this.selectedThemeKey);
@@ -794,7 +724,7 @@ class App {
 
   async createTask(summary) {
     if (!this.selectedMilestoneKey || !this.selectedMilestoneProject) {
-      UI.toast('Сначала выберите Milestone', 'error');
+      UI.toast('Select a Milestone first', 'error');
       return;
     }
 
@@ -804,7 +734,7 @@ class App {
 
     // Link task to milestone
     await jiraAPI.createIssueLink(this.selectedMilestoneKey, result.key, 'Hierarchy');
-    UI.toast(`${issueType} ${result.key} создан`, 'success');
+    UI.toast(`${issueType} ${result.key} created`, 'success');
 
     // Reload tasks for current milestone
     await this.selectMilestone(this.selectedMilestoneKey);
@@ -812,7 +742,7 @@ class App {
 
   renderHierarchyTasks(container, issues) {
     if (issues.length === 0) {
-      container.innerHTML = UI.renderEmpty('📋', 'Нет задач');
+      container.innerHTML = UI.renderEmpty('📋', 'No tasks');
       return;
     }
 
@@ -823,17 +753,23 @@ class App {
           <col style="width: 100px;">
           <col>
           <col style="width: 120px;">
+          <col style="width: 80px;">
+          <col style="width: 80px;">
           <col style="width: 100px;">
-          <col style="width: 160px;">
+          <col style="width: 140px;">
+          <col style="width: 36px;">
         </colgroup>
         <thead>
           <tr>
-            <th>Тип</th>
-            <th>Ключ</th>
-            <th>Название</th>
-            <th>Статус</th>
-            <th>Приоритет</th>
-            <th>Исполнитель</th>
+            <th>Type</th>
+            <th>Key</th>
+            <th>Summary</th>
+            <th>Jira Status</th>
+            <th>Status %</th>
+            <th>Confid. %</th>
+            <th>Priority</th>
+            <th>Assignee</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -842,6 +778,8 @@ class App {
     for (const issue of issues) {
       const f = issue.fields;
       const statusClass = UI.getStatusClass(f.status?.statusCategory?.key);
+      const localStatus = this.getLocalField(issue.key, 'status');
+      const localConfidence = this.getLocalField(issue.key, 'confidence');
 
       html += `
         <tr>
@@ -860,6 +798,12 @@ class App {
           <td>
             <span class="status-badge ${statusClass}">${UI.escapeHtml(f.status?.name || '-')}</span>
           </td>
+          <td>
+            <span class="editable-field editable-status" data-key="${issue.key}" data-field="status" title="Status (0-100)">${localStatus !== null ? localStatus + '%' : '—'}</span>
+          </td>
+          <td>
+            <span class="editable-field editable-confidence" data-key="${issue.key}" data-field="confidence" title="Confidence (0-100)">${localConfidence !== null ? localConfidence + '%' : '—'}</span>
+          </td>
           <td>${UI.escapeHtml(f.priority?.name || '-')}</td>
           <td>
             ${f.assignee
@@ -867,7 +811,10 @@ class App {
                   <img src="${f.assignee.avatarUrls?.['24x24'] || ''}" class="assignee-avatar" alt="">
                   ${UI.escapeHtml(f.assignee.displayName)}
                 </span>`
-              : '<span class="assignee-unassigned">Не назначен</span>'}
+              : '<span class="assignee-unassigned">Unassigned</span>'}
+          </td>
+          <td>
+            <a href="${jiraAPI.getIssueUrl(issue.key)}" target="_blank" class="table-jira-link" title="Open in Jira">↗</a>
           </td>
         </tr>
       `;
@@ -876,12 +823,91 @@ class App {
     html += '</tbody></table>';
     container.innerHTML = html;
 
-    // Bind click handlers for issue keys
+    // Bind click handlers for issue keys and editable fields
     container.querySelectorAll('.issue-key').forEach(el => {
       el.addEventListener('click', () => {
         this.showIssueDetail(el.dataset.key);
       });
     });
+
+    container.querySelectorAll('.editable-field').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.startInlineEdit(el);
+      });
+    });
+  }
+  // === INLINE EDITING ===
+
+  startInlineEdit(el) {
+    // Prevent double editing
+    if (el.querySelector('input')) return;
+
+    const issueKey = el.dataset.key;
+    const field = el.dataset.field;
+    const currentValue = this.getLocalField(issueKey, field);
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.max = '100';
+    input.className = 'inline-edit-input';
+    input.value = currentValue !== null ? currentValue : '';
+    input.placeholder = '0-100';
+
+    // Save original HTML
+    const originalHTML = el.innerHTML;
+    el.innerHTML = '';
+    el.classList.add('editing');
+    el.appendChild(input);
+    input.focus();
+    input.select();
+
+    const restoreContent = (value) => {
+      el.classList.remove('editing');
+      el.textContent = value !== null ? value + '%' : '—';
+    };
+
+    const save = async () => {
+      const raw = input.value.trim();
+      if (raw === '') {
+        restoreContent(currentValue);
+        return;
+      }
+      const val = parseInt(raw, 10);
+      if (isNaN(val) || val < 0 || val > 100) {
+        UI.toast('Value must be between 0 and 100', 'error');
+        restoreContent(currentValue);
+        return;
+      }
+      await this.saveLocalField(issueKey, field, val);
+      restoreContent(val);
+    };
+
+    const cancel = () => {
+      restoreContent(currentValue);
+    };
+
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        input.removeEventListener('blur', save);
+        save();
+      }
+      if (e.key === 'Escape') {
+        input.removeEventListener('blur', save);
+        cancel();
+      }
+    });
+  }
+
+  async loadHistory(issueKey) {
+    try {
+      const res = await fetch(`/api/data/history/${issueKey}`);
+      return await res.json();
+    } catch (err) {
+      console.error('Failed to load history:', err);
+      return [];
+    }
   }
 }
 

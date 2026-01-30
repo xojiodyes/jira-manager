@@ -1,0 +1,36 @@
+{
+  "issues": {
+    "TEST-1": {
+      "status": 42
+    },
+    "PROJ-10": {
+      "status": 25
+    }
+  },
+  "history": [
+    {
+      "issueKey": "TEST-1",
+      "field": "status",
+      "oldValue": null,
+      "newValue": 42,
+      "user": "mock-user",
+      "timestamp": "2026-01-30T13:23:28.229Z"
+    },
+    {
+      "issueKey": "PROJ-10",
+      "field": "status",
+      "oldValue": null,
+      "newValue": 22,
+      "user": "mock-user",
+      "timestamp": "2026-01-30T13:23:50.105Z"
+    },
+    {
+      "issueKey": "PROJ-10",
+      "field": "status",
+      "oldValue": 22,
+      "newValue": 25,
+      "user": "mock-user",
+      "timestamp": "2026-01-30T13:28:12.419Z"
+    }
+  ]
+}
