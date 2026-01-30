@@ -628,15 +628,24 @@ class App {
     let html = '<div class="hierarchy-list">';
     for (const issue of issues) {
       const f = issue.fields;
-      // Count child items (all linked issues)
-      const linksCount = (f.issuelinks || []).length;
+      // Count child items: only outward links (where this issue is parent),
+      // excluding clone-type links
+      const EXCLUDED_LINK_TYPES = ['cloners', 'duplicate'];
+      const childCount = (f.issuelinks || []).filter(link => {
+        // Must be an outward link (this issue is the source/parent)
+        if (!link.outwardIssue) return false;
+        // Exclude clone and duplicate link types
+        const typeName = (link.type?.name || '').toLowerCase();
+        if (EXCLUDED_LINK_TYPES.some(ex => typeName.includes(ex))) return false;
+        return true;
+      }).length;
 
       html += `
         <div class="hierarchy-row" data-key="${issue.key}" data-level="${level}">
           <div class="hierarchy-row-main">
             <span class="issue-key" data-key="${issue.key}">${issue.key}</span>
             <span class="hierarchy-summary">${UI.escapeHtml(f.summary)}</span>
-            <span class="hierarchy-items-count" title="Связанных элементов">${linksCount}</span>
+            <span class="hierarchy-items-count" title="Дочерних элементов">${childCount}</span>
           </div>
         </div>
       `;
