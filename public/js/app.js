@@ -523,9 +523,17 @@ class App {
 
     try {
       // Get the theme issue to read its links
+      console.log(`[Hierarchy] selectTheme: loading issue ${issueKey}`);
       const theme = await jiraAPI.getIssue(issueKey);
       this.selectedThemeProject = theme.fields.project?.key || null;
       const links = theme.fields.issuelinks || [];
+      console.log(`[Hierarchy] Theme ${issueKey}: found ${links.length} issuelinks`);
+      links.forEach((link, i) => {
+        const type = link.type?.name || 'unknown';
+        const outKey = link.outwardIssue?.key || '-';
+        const inKey = link.inwardIssue?.key || '-';
+        console.log(`[Hierarchy]   link[${i}]: type="${type}", outward="${link.type?.outward || ''}", inward="${link.type?.inward || ''}", outwardIssue=${outKey}, inwardIssue=${inKey}`);
+      });
 
       // Collect ALL linked issue keys (both outward and inward)
       const linkedKeys = [];
@@ -533,8 +541,10 @@ class App {
         if (link.outwardIssue) linkedKeys.push(link.outwardIssue.key);
         if (link.inwardIssue) linkedKeys.push(link.inwardIssue.key);
       }
+      console.log(`[Hierarchy] Linked keys: [${linkedKeys.join(', ')}]`);
 
       if (linkedKeys.length === 0) {
+        console.log(`[Hierarchy] No linked keys found — showing empty`);
         milestonesContainer.innerHTML = UI.renderEmpty('🎯', 'Нет связанных milestones');
         milestonesCount.textContent = '';
         return;
@@ -542,7 +552,12 @@ class App {
 
       // Fetch linked issues WITH labels filter — only milestones
       const jql = `key in (${linkedKeys.join(',')}) AND labels = milestone ORDER BY updated DESC`;
+      console.log(`[Hierarchy] Milestones JQL: ${jql}`);
       const data = await jiraAPI.searchIssues(jql, 0, 50);
+      console.log(`[Hierarchy] Milestones search result: ${data.total} found, ${data.issues?.length} returned`);
+      data.issues?.forEach(issue => {
+        console.log(`[Hierarchy]   milestone: ${issue.key} "${issue.fields?.summary}" labels=[${issue.fields?.labels?.join(',')}]`);
+      });
       milestonesCount.textContent = data.total > 0 ? data.total : '';
       this.renderHierarchyList(milestonesContainer, data.issues, 'milestone');
     } catch (err) {
