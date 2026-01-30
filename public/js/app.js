@@ -109,6 +109,13 @@ class App {
     return '';
   }
 
+  getSelectedLinkType() {
+    if (this.selectedJqlIndex >= 0 && this.jqlFilters[this.selectedJqlIndex]) {
+      return this.jqlFilters[this.selectedJqlIndex].linkType || 'Relates';
+    }
+    return 'Relates';
+  }
+
   onJqlSelect(index) {
     this.selectedJqlIndex = index;
     this.saveJqlFilters();
@@ -129,6 +136,7 @@ class App {
   openAddJqlModal() {
     document.getElementById('jqlName').value = '';
     document.getElementById('jqlQuery').value = '';
+    document.getElementById('jqlLinkType').value = '';
     UI.openModal('addJqlModal');
     document.getElementById('jqlName').focus();
   }
@@ -136,6 +144,7 @@ class App {
   saveNewJql() {
     const name = document.getElementById('jqlName').value.trim();
     const jql = document.getElementById('jqlQuery').value.trim();
+    const linkType = document.getElementById('jqlLinkType').value.trim();
 
     if (!name) {
       UI.toast('Enter a name', 'error');
@@ -146,7 +155,7 @@ class App {
       return;
     }
 
-    this.jqlFilters.push({ name, jql });
+    this.jqlFilters.push({ name, jql, linkType: linkType || 'Relates' });
     this.selectedJqlIndex = this.jqlFilters.length - 1;
     this.saveJqlFilters();
     this.renderJqlDropdown();
@@ -737,7 +746,7 @@ class App {
     const result = await jiraAPI.createIssue(projectKey, summary, 'Story', ['milestone']);
 
     // Link milestone to theme
-    await jiraAPI.createIssueLink(this.selectedThemeKey, result.key, 'Hierarchy');
+    await jiraAPI.createIssueLink(this.selectedThemeKey, result.key, this.getSelectedLinkType());
     UI.toast(`Milestone ${result.key} created`, 'success');
 
     // Reload milestones for current theme
@@ -755,7 +764,7 @@ class App {
     const result = await jiraAPI.createIssue(projectKey, summary, issueType, []);
 
     // Link task to milestone
-    await jiraAPI.createIssueLink(this.selectedMilestoneKey, result.key, 'Hierarchy');
+    await jiraAPI.createIssueLink(this.selectedMilestoneKey, result.key, this.getSelectedLinkType());
     UI.toast(`${issueType} ${result.key} created`, 'success');
 
     // Reload tasks for current milestone
