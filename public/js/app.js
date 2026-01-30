@@ -136,32 +136,48 @@ class App {
     }
   }
 
-  openAddJqlModal() {
+  async loadLinkTypesDropdown(selectedValue) {
+    const select = document.getElementById('jqlLinkType');
+    select.innerHTML = '<option value="">Loading...</option>';
+    try {
+      const types = await jiraAPI.getIssueLinkTypes();
+      let html = '<option value="">— Select link type —</option>';
+      for (const t of types) {
+        const sel = t.name === selectedValue ? ' selected' : '';
+        html += `<option value="${UI.escapeHtml(t.name)}"${sel}>${UI.escapeHtml(t.name)} (${UI.escapeHtml(t.inward)} / ${UI.escapeHtml(t.outward)})</option>`;
+      }
+      select.innerHTML = html;
+    } catch (err) {
+      select.innerHTML = '<option value="">Failed to load</option>';
+    }
+  }
+
+  async openAddJqlModal() {
     this._editingJqlIndex = -1;
     document.querySelector('#addJqlModal .modal-header h3').textContent = 'Add JQL';
     document.getElementById('jqlName').value = '';
     document.getElementById('jqlQuery').value = '';
-    document.getElementById('jqlLinkType').value = '';
     UI.openModal('addJqlModal');
     document.getElementById('jqlName').focus();
+    await this.loadLinkTypesDropdown('');
   }
 
-  openEditJqlModal() {
+  async openEditJqlModal() {
     if (this.selectedJqlIndex < 0) return;
     const f = this.jqlFilters[this.selectedJqlIndex];
     this._editingJqlIndex = this.selectedJqlIndex;
     document.querySelector('#addJqlModal .modal-header h3').textContent = 'Edit JQL';
     document.getElementById('jqlName').value = f.name;
     document.getElementById('jqlQuery').value = f.jql;
-    document.getElementById('jqlLinkType').value = f.linkType || '';
     UI.openModal('addJqlModal');
     document.getElementById('jqlName').focus();
+    await this.loadLinkTypesDropdown(f.linkType || '');
   }
 
   saveJqlFromModal() {
     const name = document.getElementById('jqlName').value.trim();
     const jql = document.getElementById('jqlQuery').value.trim();
-    const linkType = document.getElementById('jqlLinkType').value.trim();
+    const linkType = document.getElementById('jqlLinkType').value;
 
     if (!name) {
       UI.toast('Enter a name', 'error');

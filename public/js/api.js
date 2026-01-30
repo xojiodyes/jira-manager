@@ -173,6 +173,14 @@ class JiraAPI {
   }
 
   /**
+   * Get all issue link types
+   */
+  async getIssueLinkTypes() {
+    const data = await this.request('/rest/api/2/issueLinkType');
+    return data.issueLinkTypes || [];
+  }
+
+  /**
    * Create issue link
    */
   async createIssueLink(parentKey, childKey, linkTypeName = 'Hierarchy') {
