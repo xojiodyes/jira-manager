@@ -560,16 +560,15 @@ class App {
         <span class="hlh-summary">Summary</span>
         <span class="hlh-field">Status</span>
         <span class="hlh-field">Confid.</span>
-        <span class="hlh-count">Items</span>
+        <span class="hlh-count">Links</span>
         <span class="hlh-link"></span>
       </div>`;
     for (const issue of issues) {
       const f = issue.fields;
-      // Count child items: only outward links (where this issue is parent),
-      // excluding clone-type links
+      // Count linked items (outward + inward), excluding clone/duplicate links
       const EXCLUDED_LINK_TYPES = ['cloners', 'duplicate'];
       const childCount = (f.issuelinks || []).filter(link => {
-        if (!link.outwardIssue) return false;
+        if (!link.outwardIssue && !link.inwardIssue) return false;
         const typeName = (link.type?.name || '').toLowerCase();
         if (EXCLUDED_LINK_TYPES.some(ex => typeName.includes(ex))) return false;
         return true;
@@ -585,7 +584,7 @@ class App {
             <span class="hierarchy-summary">${UI.escapeHtml(f.summary)}</span>
             <span class="editable-field editable-status" data-key="${issue.key}" data-field="status" title="Status (0-100)">${status !== null ? status + '%' : '—'}</span>
             <span class="editable-field editable-confidence" data-key="${issue.key}" data-field="confidence" title="Confidence (0-100)">${confidence !== null ? confidence + '%' : '—'}</span>
-            <span class="hierarchy-items-count" title="Child items">${childCount}</span>
+            <span class="hierarchy-items-count" title="Linked issues">${childCount}</span>
             <a href="${jiraAPI.getIssueUrl(issue.key)}" target="_blank" class="hierarchy-jira-link" title="Open in Jira" onclick="event.stopPropagation()">↗</a>
           </div>
         </div>
@@ -767,7 +766,7 @@ class App {
       <table class="issues-table issues-table-fixed">
         <colgroup>
           <col style="width: 90px;">
-          <col style="width: 100px;">
+          <col style="width: 130px;">
           <col>
           <col style="width: 120px;">
           <col style="width: 80px;">

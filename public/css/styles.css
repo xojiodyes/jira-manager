@@ -798,7 +798,7 @@ a:hover {
 }
 
 .hlh-key {
-  width: 70px;
+  width: 110px;
   flex-shrink: 0;
 }
 
@@ -842,8 +842,9 @@ a:hover {
 }
 
 .hierarchy-row-main > .issue-key {
-  width: 70px;
+  width: 110px;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .hierarchy-summary {
