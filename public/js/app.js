@@ -464,9 +464,12 @@ class App {
         console.log(`[Hierarchy]   link[${i}]: type="${type}", outward="${link.type?.outward || ''}", inward="${link.type?.inward || ''}", outwardIssue=${outKey}, inwardIssue=${inKey}`);
       });
 
-      // Collect ALL linked issue keys (both outward and inward)
+      // Collect ALL linked issue keys (both outward and inward), excluding clones/duplicates
+      const EXCLUDED = ['cloners', 'duplicate'];
       const linkedKeys = [];
       for (const link of links) {
+        const typeName = (link.type?.name || '').toLowerCase();
+        if (EXCLUDED.some(ex => typeName.includes(ex))) continue;
         if (link.outwardIssue) linkedKeys.push(link.outwardIssue.key);
         if (link.inwardIssue) linkedKeys.push(link.inwardIssue.key);
       }
@@ -520,9 +523,12 @@ class App {
       this.selectedMilestoneProject = milestone.fields.project?.key || null;
       const links = milestone.fields.issuelinks || [];
 
-      // Collect ALL linked issue keys (both outward and inward)
+      // Collect ALL linked issue keys (both outward and inward), excluding clones/duplicates
+      const EXCLUDED = ['cloners', 'duplicate'];
       const linkedKeys = [];
       for (const link of links) {
+        const typeName = (link.type?.name || '').toLowerCase();
+        if (EXCLUDED.some(ex => typeName.includes(ex))) continue;
         if (link.outwardIssue) linkedKeys.push(link.outwardIssue.key);
         if (link.inwardIssue) linkedKeys.push(link.inwardIssue.key);
       }
@@ -534,8 +540,8 @@ class App {
         return;
       }
 
-      // Fetch linked issues EXCLUDING themes and milestones
-      const jql = `key in (${linkedKeys.join(',')}) AND labels not in (theme, milestone) ORDER BY updated DESC`;
+      // Fetch linked issues EXCLUDING themes and milestones (include issues with no labels)
+      const jql = `key in (${linkedKeys.join(',')}) AND (labels is EMPTY OR (labels != theme AND labels != milestone)) ORDER BY updated DESC`;
       const data = await jiraAPI.searchIssues(jql, 0, 200);
       tasksContainer.classList.remove('loading-overlay');
       tasksCount.textContent = data.total > 0 ? data.total : '';
@@ -560,15 +566,15 @@ class App {
         <span class="hlh-summary">Summary</span>
         <span class="hlh-field">Status</span>
         <span class="hlh-field">Confid.</span>
-        <span class="hlh-count">Links</span>
+        <span class="hlh-count">Items</span>
         <span class="hlh-link"></span>
       </div>`;
     for (const issue of issues) {
       const f = issue.fields;
-      // Count linked items (outward + inward), excluding clone/duplicate links
+      // Count child items: only outward links, excluding clone/duplicate
       const EXCLUDED_LINK_TYPES = ['cloners', 'duplicate'];
       const childCount = (f.issuelinks || []).filter(link => {
-        if (!link.outwardIssue && !link.inwardIssue) return false;
+        if (!link.outwardIssue) return false;
         const typeName = (link.type?.name || '').toLowerCase();
         if (EXCLUDED_LINK_TYPES.some(ex => typeName.includes(ex))) return false;
         return true;
@@ -584,7 +590,7 @@ class App {
             <span class="hierarchy-summary">${UI.escapeHtml(f.summary)}</span>
             <span class="editable-field editable-status" data-key="${issue.key}" data-field="status" title="Status (0-100)">${status !== null ? status + '%' : '—'}</span>
             <span class="editable-field editable-confidence" data-key="${issue.key}" data-field="confidence" title="Confidence (0-100)">${confidence !== null ? confidence + '%' : '—'}</span>
-            <span class="hierarchy-items-count" title="Linked issues">${childCount}</span>
+            <span class="hierarchy-items-count" title="Child items">${childCount}</span>
             <a href="${jiraAPI.getIssueUrl(issue.key)}" target="_blank" class="hierarchy-jira-link" title="Open in Jira" onclick="event.stopPropagation()">↗</a>
           </div>
         </div>
