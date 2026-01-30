@@ -472,7 +472,24 @@ class App {
     document.getElementById('hierarchyTasksCount').textContent = '';
 
     try {
-      const hierarchyJql = this.serverConfig?.hierarchyJql || 'labels = theme ORDER BY updated DESC';
+      // Always filter by label "theme"; user JQL from config adds extra conditions
+      const userJql = this.serverConfig?.hierarchyJql || '';
+      let hierarchyJql;
+      if (userJql) {
+        // Insert "labels = theme AND" before user JQL, preserve ORDER BY if present
+        const orderMatch = userJql.match(/^(.*?)\s*(ORDER\s+BY\s+.*)$/i);
+        if (orderMatch) {
+          const conditions = orderMatch[1].trim();
+          const orderBy = orderMatch[2];
+          hierarchyJql = conditions
+            ? `labels = theme AND ${conditions} ${orderBy}`
+            : `labels = theme ${orderBy}`;
+        } else {
+          hierarchyJql = `labels = theme AND ${userJql}`;
+        }
+      } else {
+        hierarchyJql = 'labels = theme ORDER BY updated DESC';
+      }
       const data = await jiraAPI.searchIssues(hierarchyJql, 0, 50);
       countEl.textContent = data.total > 0 ? data.total : '';
       this.renderHierarchyList(container, data.issues, 'theme');
