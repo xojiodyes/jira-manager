@@ -1,0 +1,6 @@
+{
+  "jiraHost": "your-domain.atlassian.net",
+  "jiraUser": "your-email@company.com",
+  "apiToken": "your-api-token-here",
+  "hierarchyJql": "labels = theme ORDER BY updated DESC"
+}

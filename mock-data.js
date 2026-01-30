@@ -1,0 +1,581 @@
+// Mock data for testing without a real Jira connection
+// Activated when X-Jira-Host header is "mock"
+
+const USERS = {
+  ivan: {
+    accountId: 'mock-user-1',
+    displayName: 'Иван Петров',
+    emailAddress: 'ivan@example.com',
+    avatarUrls: { '48x48': '', '32x32': '', '24x24': '', '16x16': '' },
+    active: true
+  },
+  anna: {
+    accountId: 'mock-user-2',
+    displayName: 'Анна Сидорова',
+    emailAddress: 'anna@example.com',
+    avatarUrls: { '48x48': '', '32x32': '', '24x24': '', '16x16': '' },
+    active: true
+  },
+  sergey: {
+    accountId: 'mock-user-3',
+    displayName: 'Сергей Козлов',
+    emailAddress: 'sergey@example.com',
+    avatarUrls: { '48x48': '', '32x32': '', '24x24': '', '16x16': '' },
+    active: true
+  }
+};
+
+const STATUSES = {
+  todo: { name: 'To Do', id: '10000', statusCategory: { id: 2, key: 'new', name: 'To Do' } },
+  inProgress: { name: 'In Progress', id: '10001', statusCategory: { id: 4, key: 'indeterminate', name: 'In Progress' } },
+  inReview: { name: 'In Review', id: '10002', statusCategory: { id: 4, key: 'indeterminate', name: 'In Progress' } },
+  done: { name: 'Done', id: '10003', statusCategory: { id: 3, key: 'done', name: 'Done' } }
+};
+
+const PRIORITIES = {
+  highest: { id: '1', name: 'Highest', iconUrl: '' },
+  high: { id: '2', name: 'High', iconUrl: '' },
+  medium: { id: '3', name: 'Medium', iconUrl: '' },
+  low: { id: '4', name: 'Low', iconUrl: '' }
+};
+
+const ISSUE_TYPES = {
+  story: { id: '10001', name: 'Story', iconUrl: '' },
+  bug: { id: '10002', name: 'Bug', iconUrl: '' },
+  task: { id: '10003', name: 'Task', iconUrl: '' },
+  epic: { id: '10004', name: 'Epic', iconUrl: '' }
+};
+
+const PROJECTS = [
+  { id: '10000', key: 'PROJ', name: 'Основной проект', projectTypeKey: 'software' },
+  { id: '10001', key: 'DEMO', name: 'Демо проект', projectTypeKey: 'software' }
+];
+
+const LINK_TYPE = {
+  name: 'Hierarchy',
+  inward: 'is child of',
+  outward: 'is parent of'
+};
+
+const now = new Date();
+const daysAgo = (d) => new Date(now - d * 86400000).toISOString();
+const hoursAgo = (h) => new Date(now - h * 3600000).toISOString();
+
+// Helper to create a link reference (populated after ISSUES array is built)
+function outwardLink(key) {
+  return { type: LINK_TYPE, outwardIssue: { key, fields: null } };
+}
+function inwardLink(key) {
+  return { type: LINK_TYPE, inwardIssue: { key, fields: null } };
+}
+
+const ISSUES = [
+  // === THEMES ===
+  {
+    id: '10010', key: 'PROJ-10',
+    fields: {
+      summary: 'Авторизация и безопасность',
+      description: 'Тема, объединяющая все задачи по авторизации, аутентификации и безопасности платформы.',
+      status: STATUSES.inProgress,
+      assignee: USERS.ivan,
+      priority: PRIORITIES.high,
+      issuetype: ISSUE_TYPES.story,
+      project: PROJECTS[0],
+      labels: ['Theme'],
+      created: daysAgo(30),
+      updated: daysAgo(1),
+      issuelinks: [outwardLink('PROJ-12'), outwardLink('PROJ-13')],
+      comment: { comments: [], total: 0 }
+    }
+  },
+  {
+    id: '10011', key: 'PROJ-11',
+    fields: {
+      summary: 'Платформа и инфраструктура',
+      description: 'Тема, объединяющая задачи по инфраструктуре, CI/CD, мониторингу и DevOps.',
+      status: STATUSES.inProgress,
+      assignee: USERS.sergey,
+      priority: PRIORITIES.high,
+      issuetype: ISSUE_TYPES.story,
+      project: PROJECTS[0],
+      labels: ['theme'],
+      created: daysAgo(30),
+      updated: daysAgo(2),
+      issuelinks: [outwardLink('PROJ-14')],
+      comment: { comments: [], total: 0 }
+    }
+  },
+
+  // === MILESTONES ===
+  {
+    id: '10012', key: 'PROJ-12',
+    fields: {
+      summary: 'Q1 2026 Release',
+      description: 'Milestone для первого квартала 2026. Включает основные фичи авторизации и критические багфиксы.',
+      status: STATUSES.inProgress,
+      assignee: USERS.ivan,
+      priority: PRIORITIES.high,
+      issuetype: ISSUE_TYPES.story,
+      project: PROJECTS[0],
+      labels: ['Milestone'],
+      created: daysAgo(28),
+      updated: daysAgo(1),
+      issuelinks: [inwardLink('PROJ-10'), outwardLink('PROJ-1'), outwardLink('PROJ-2')],
+      comment: { comments: [], total: 0 }
+    }
+  },
+  {
+    id: '10013', key: 'PROJ-13',
+    fields: {
+      summary: 'Q2 2026 Planning',
+      description: 'Milestone для второго квартала. Включает пагинацию и модуль оплаты.',
+      status: STATUSES.todo,
+      assignee: USERS.anna,
+      priority: PRIORITIES.medium,
+      issuetype: ISSUE_TYPES.story,
+      project: PROJECTS[0],
+      labels: ['milestone'],
+      created: daysAgo(20),
+      updated: daysAgo(3),
+      issuelinks: [inwardLink('PROJ-10'), outwardLink('PROJ-3'), outwardLink('PROJ-4')],
+      comment: { comments: [], total: 0 }
+    }
+  },
+  {
+    id: '10014', key: 'PROJ-14',
+    fields: {
+      summary: 'MVP Демо-продукт',
+      description: 'Milestone для MVP демо-продукта. Landing page и исправление мобильных багов.',
+      status: STATUSES.inProgress,
+      assignee: USERS.anna,
+      priority: PRIORITIES.high,
+      issuetype: ISSUE_TYPES.story,
+      project: PROJECTS[1],
+      labels: ['Milestone'],
+      created: daysAgo(15),
+      updated: hoursAgo(2),
+      issuelinks: [inwardLink('PROJ-11'), outwardLink('DEMO-1'), outwardLink('DEMO-3')],
+      comment: { comments: [], total: 0 }
+    }
+  },
+
+  // === REGULAR ISSUES ===
+  {
+    id: '10001', key: 'PROJ-1',
+    fields: {
+      summary: 'Реализовать авторизацию через OAuth 2.0',
+      description: 'Необходимо добавить поддержку авторизации через OAuth 2.0.\n\n*Требования:*\n- Поддержка Google и GitHub провайдеров\n- Сохранение токенов в secure cookie\n- Refresh token flow\n\n{code}\nconst oauth = new OAuth2Client(clientId, clientSecret);\n{code}',
+      status: STATUSES.inProgress,
+      assignee: USERS.ivan,
+      priority: PRIORITIES.high,
+      issuetype: ISSUE_TYPES.story,
+      project: PROJECTS[0],
+      labels: [],
+      created: daysAgo(5),
+      updated: hoursAgo(2),
+      issuelinks: [inwardLink('PROJ-12')],
+      comment: { comments: [
+        { id: '1', author: USERS.anna, body: 'Начала review PR, выглядит хорошо. Пара мелких замечаний.', created: hoursAgo(3), updated: hoursAgo(3) },
+        { id: '2', author: USERS.ivan, body: 'Поправил замечания, можно перепроверить.', created: hoursAgo(2), updated: hoursAgo(2) }
+      ], total: 2 }
+    }
+  },
+  {
+    id: '10002', key: 'PROJ-2',
+    fields: {
+      summary: 'Исправить утечку памяти в WebSocket соединении',
+      description: 'При длительном подключении через WebSocket наблюдается утечка памяти.\n\nШаги воспроизведения:\n- Открыть приложение\n- Оставить вкладку открытой на 2+ часа\n- Наблюдать рост потребления памяти в DevTools',
+      status: STATUSES.inReview,
+      assignee: USERS.sergey,
+      priority: PRIORITIES.highest,
+      issuetype: ISSUE_TYPES.bug,
+      project: PROJECTS[0],
+      labels: [],
+      created: daysAgo(3),
+      updated: hoursAgo(5),
+      issuelinks: [inwardLink('PROJ-12')],
+      comment: { comments: [
+        { id: '3', author: USERS.sergey, body: 'Нашёл причину — не отписываемся от event listener при reconnect.', created: daysAgo(1), updated: daysAgo(1) }
+      ], total: 1 }
+    }
+  },
+  {
+    id: '10003', key: 'PROJ-3',
+    fields: {
+      summary: 'Добавить пагинацию в список пользователей',
+      description: 'Список пользователей загружает все записи сразу. При большом количестве (5000+) страница тормозит.\n\nНужно добавить серверную пагинацию с размером страницы 50.',
+      status: STATUSES.todo,
+      assignee: USERS.anna,
+      priority: PRIORITIES.medium,
+      issuetype: ISSUE_TYPES.story,
+      project: PROJECTS[0],
+      labels: [],
+      created: daysAgo(7),
+      updated: daysAgo(2),
+      issuelinks: [inwardLink('PROJ-13')],
+      comment: { comments: [], total: 0 }
+    }
+  },
+  {
+    id: '10004', key: 'PROJ-4',
+    fields: {
+      summary: 'Написать unit-тесты для модуля оплаты',
+      description: 'Покрытие модуля оплаты тестами < 30%. Нужно довести до 80%.\n\nКлючевые сценарии:\n- Успешная оплата\n- Недостаточно средств\n- Таймаут платёжного шлюза\n- Повторная оплата (идемпотентность)',
+      status: STATUSES.todo,
+      assignee: USERS.ivan,
+      priority: PRIORITIES.medium,
+      issuetype: ISSUE_TYPES.task,
+      project: PROJECTS[0],
+      labels: [],
+      created: daysAgo(10),
+      updated: daysAgo(4),
+      issuelinks: [inwardLink('PROJ-13')],
+      comment: { comments: [], total: 0 }
+    }
+  },
+  {
+    id: '10005', key: 'PROJ-5',
+    fields: {
+      summary: 'Обновить зависимости до актуальных версий',
+      description: 'Несколько пакетов имеют критические уязвимости (npm audit).\n\nНужно обновить:\n- express: 4.17 → 4.21\n- jsonwebtoken: 8.5 → 9.0\n- mongoose: 6.x → 8.x',
+      status: STATUSES.done,
+      assignee: USERS.sergey,
+      priority: PRIORITIES.high,
+      issuetype: ISSUE_TYPES.task,
+      project: PROJECTS[0],
+      labels: [],
+      created: daysAgo(14),
+      updated: daysAgo(1),
+      issuelinks: [],
+      comment: { comments: [
+        { id: '4', author: USERS.sergey, body: 'Все пакеты обновлены, тесты проходят.', created: daysAgo(1), updated: daysAgo(1) },
+        { id: '5', author: USERS.anna, body: 'Проверила на staging — всё работает. Можно закрывать.', created: daysAgo(1), updated: daysAgo(1) }
+      ], total: 2 }
+    }
+  },
+  {
+    id: '10006', key: 'DEMO-1',
+    fields: {
+      summary: 'Создать landing page для нового продукта',
+      description: 'Дизайн готов в Figma. Нужно сверстать лендинг.\n\n*Секции:*\n- Hero с анимацией\n- Преимущества (3 колонки)\n- Тарифы\n- FAQ (аккордеон)\n- Форма обратной связи',
+      status: STATUSES.inProgress,
+      assignee: USERS.anna,
+      priority: PRIORITIES.high,
+      issuetype: ISSUE_TYPES.story,
+      project: PROJECTS[1],
+      labels: [],
+      created: daysAgo(4),
+      updated: hoursAgo(1),
+      issuelinks: [inwardLink('PROJ-14')],
+      comment: { comments: [
+        { id: '6', author: USERS.anna, body: 'Hero и преимущества готовы. Сейчас делаю тарифы.', created: hoursAgo(1), updated: hoursAgo(1) }
+      ], total: 1 }
+    }
+  },
+  {
+    id: '10007', key: 'DEMO-2',
+    fields: {
+      summary: 'Настроить CI/CD пайплайн в GitHub Actions',
+      description: 'Нужно настроить автоматический деплой:\n\n- Линтинг и тесты на каждый PR\n- Деплой на staging при мерже в develop\n- Деплой на production при мерже в main\n- Уведомления в Slack',
+      status: STATUSES.done,
+      assignee: USERS.sergey,
+      priority: PRIORITIES.medium,
+      issuetype: ISSUE_TYPES.task,
+      project: PROJECTS[1],
+      labels: [],
+      created: daysAgo(12),
+      updated: daysAgo(3),
+      issuelinks: [],
+      comment: { comments: [
+        { id: '7', author: USERS.sergey, body: 'Pipeline настроен, Slack webhook подключен.', created: daysAgo(3), updated: daysAgo(3) }
+      ], total: 1 }
+    }
+  },
+  {
+    id: '10008', key: 'DEMO-3',
+    fields: {
+      summary: 'Кнопка "Купить" не работает на мобильных устройствах',
+      description: 'На iOS Safari и Chrome Mobile кнопка "Купить" не реагирует на нажатие.\n\nВоспроизводится на:\n- iPhone 14, iOS 17, Safari\n- Samsung Galaxy S23, Chrome 120\n\nНа десктопе работает нормально.',
+      status: STATUSES.inProgress,
+      assignee: USERS.ivan,
+      priority: PRIORITIES.highest,
+      issuetype: ISSUE_TYPES.bug,
+      project: PROJECTS[1],
+      labels: [],
+      created: daysAgo(1),
+      updated: hoursAgo(4),
+      issuelinks: [inwardLink('PROJ-14')],
+      comment: { comments: [
+        { id: '8', author: USERS.ivan, body: 'Похоже на проблему с z-index — оверлей перекрывает кнопку на маленьких экранах.', created: hoursAgo(4), updated: hoursAgo(4) }
+      ], total: 1 }
+    }
+  },
+  {
+    id: '10009', key: 'PROJ-6',
+    fields: {
+      summary: 'Добавить экспорт отчётов в PDF',
+      description: 'Пользователи просят возможность экспорта отчётов в PDF.\n\nТребования:\n- Таблицы с данными\n- Графики (конвертировать canvas в изображение)\n- Фирменный стиль (логотип, шапка)',
+      status: STATUSES.todo,
+      assignee: null,
+      priority: PRIORITIES.low,
+      issuetype: ISSUE_TYPES.story,
+      project: PROJECTS[0],
+      labels: [],
+      created: daysAgo(2),
+      updated: daysAgo(2),
+      issuelinks: [],
+      comment: { comments: [], total: 0 }
+    }
+  }
+];
+
+// Populate link references with actual field data (summary, labels, status)
+for (const issue of ISSUES) {
+  if (!issue.fields.issuelinks) continue;
+  for (const link of issue.fields.issuelinks) {
+    const targetKey = link.outwardIssue?.key || link.inwardIssue?.key;
+    const target = ISSUES.find(i => i.key === targetKey);
+    if (!target) continue;
+    const ref = { key: targetKey, fields: { summary: target.fields.summary, labels: target.fields.labels, status: target.fields.status, issuetype: target.fields.issuetype } };
+    if (link.outwardIssue) link.outwardIssue = ref;
+    if (link.inwardIssue) link.inwardIssue = ref;
+  }
+}
+
+// Simple JQL filter
+function filterByJql(jql) {
+  if (!jql) return ISSUES;
+
+  const lower = jql.toLowerCase();
+  let filtered = [...ISSUES];
+
+  // key in (X, Y, Z)
+  const keyInMatch = jql.match(/key\s+in\s*\(([^)]+)\)/i);
+  if (keyInMatch) {
+    const keys = keyInMatch[1].split(',').map(s => s.trim().replace(/['"]/g, ''));
+    filtered = filtered.filter(i => keys.includes(i.key));
+  }
+
+  // labels = X (case-insensitive)
+  const labelMatch = lower.match(/labels\s*=\s*['"]?(\w+)['"]?/);
+  if (labelMatch) {
+    const lbl = labelMatch[1].toLowerCase();
+    filtered = filtered.filter(i => (i.fields.labels || []).some(l => l.toLowerCase() === lbl));
+  }
+
+  // labels in (X, Y)
+  const labelsInMatch = lower.match(/labels\s+in\s*\(([^)]+)\)/);
+  if (labelsInMatch) {
+    const lbls = labelsInMatch[1].split(',').map(s => s.trim().replace(/['"]/g, '').toLowerCase());
+    filtered = filtered.filter(i => (i.fields.labels || []).some(l => lbls.includes(l.toLowerCase())));
+  }
+
+  // project = X
+  const projectMatch = lower.match(/project\s*=\s*['"]?(\w+)['"]?/);
+  if (projectMatch) {
+    const proj = projectMatch[1].toUpperCase();
+    filtered = filtered.filter(i => i.fields.project.key === proj);
+  }
+
+  // status = X
+  const statusMatch = lower.match(/status\s*=\s*'([^']+)'/);
+  if (statusMatch) {
+    const st = statusMatch[1].toLowerCase();
+    filtered = filtered.filter(i => i.fields.status.name.toLowerCase() === st);
+  }
+
+  // status != X
+  const statusNeqMatch = lower.match(/status\s*!=\s*'?(\w+)'?/);
+  if (statusNeqMatch) {
+    const st = statusNeqMatch[1].toLowerCase();
+    filtered = filtered.filter(i => i.fields.status.name.toLowerCase() !== st);
+  }
+
+  // issuetype = X / type = X
+  const typeMatch = lower.match(/(?:issuetype|type)\s*=\s*['"]?(\w+)['"]?/);
+  if (typeMatch) {
+    const t = typeMatch[1].toLowerCase();
+    filtered = filtered.filter(i => i.fields.issuetype.name.toLowerCase() === t);
+  }
+
+  // assignee = currentUser() — return all assigned issues
+  if (lower.includes('assignee = currentuser()')) {
+    filtered = filtered.filter(i => i.fields.assignee !== null);
+  }
+
+  // created >= -Nd
+  const createdMatch = lower.match(/created\s*>=\s*-(\d+)d/);
+  if (createdMatch) {
+    const days = parseInt(createdMatch[1]);
+    const since = new Date(now - days * 86400000).toISOString();
+    filtered = filtered.filter(i => i.fields.created >= since);
+  }
+
+  // updated >= -Nd
+  const updatedMatch = lower.match(/updated\s*>=\s*-(\d+)d/);
+  if (updatedMatch) {
+    const days = parseInt(updatedMatch[1]);
+    const since = new Date(now - days * 86400000).toISOString();
+    filtered = filtered.filter(i => i.fields.updated >= since);
+  }
+
+  // ORDER BY
+  const orderMatch = lower.match(/order\s+by\s+(\w+)\s+(asc|desc)?/);
+  if (orderMatch) {
+    const field = orderMatch[1];
+    const dir = orderMatch[2] || 'desc';
+    filtered.sort((a, b) => {
+      let va = a.fields[field] || '';
+      let vb = b.fields[field] || '';
+      if (field === 'priority') {
+        va = a.fields.priority ? a.fields.priority.id : '99';
+        vb = b.fields.priority ? b.fields.priority.id : '99';
+      }
+      if (dir === 'asc') return va > vb ? 1 : -1;
+      return va < vb ? 1 : -1;
+    });
+  }
+
+  return filtered;
+}
+
+// Track next ID for creating issues
+let nextId = 20000;
+
+// Handle mock API requests
+function handleMockRequest(jiraPath, query, method, reqBody) {
+  method = (method || 'GET').toUpperCase();
+
+  // POST /rest/api/2/issue — create issue
+  if (jiraPath === '/rest/api/2/issue' && method === 'POST') {
+    const data = typeof reqBody === 'string' ? JSON.parse(reqBody) : reqBody;
+    const fields = data.fields || {};
+    const projectKey = fields.project?.key || 'PROJ';
+    const project = PROJECTS.find(p => p.key === projectKey) || PROJECTS[0];
+
+    // Generate next issue number for this project
+    const projectIssues = ISSUES.filter(i => i.key.startsWith(projectKey + '-'));
+    const maxNum = projectIssues.reduce((max, i) => {
+      const num = parseInt(i.key.split('-')[1]);
+      return num > max ? num : max;
+    }, 0);
+    const newKey = `${projectKey}-${maxNum + 1}`;
+
+    const newIssue = {
+      id: String(nextId++),
+      key: newKey,
+      fields: {
+        summary: fields.summary || 'Новая задача',
+        description: fields.description || '',
+        status: STATUSES.todo,
+        assignee: null,
+        priority: PRIORITIES.medium,
+        issuetype: ISSUE_TYPES[fields.issuetype?.name?.toLowerCase()] || ISSUE_TYPES.story,
+        project: project,
+        labels: fields.labels || [],
+        created: new Date().toISOString(),
+        updated: new Date().toISOString(),
+        issuelinks: [],
+        comment: { comments: [], total: 0 }
+      }
+    };
+
+    ISSUES.push(newIssue);
+    return { status: 201, body: { id: newIssue.id, key: newIssue.key, self: '' } };
+  }
+
+  // POST /rest/api/2/issueLink — create link between issues
+  if (jiraPath === '/rest/api/2/issueLink' && method === 'POST') {
+    const data = typeof reqBody === 'string' ? JSON.parse(reqBody) : reqBody;
+    const linkTypeName = data.type?.name || 'Hierarchy';
+    const inwardKey = data.inwardIssue?.key;
+    const outwardKey = data.outwardIssue?.key;
+
+    const inwardIssue = ISSUES.find(i => i.key === inwardKey);
+    const outwardIssue = ISSUES.find(i => i.key === outwardKey);
+
+    if (!inwardIssue || !outwardIssue) {
+      return { status: 404, body: { errorMessages: ['Issue not found'] } };
+    }
+
+    const linkType = { name: linkTypeName, inward: 'is child of', outward: 'is parent of' };
+
+    // Add outward link on the outward issue (parent → child)
+    outwardIssue.fields.issuelinks.push({
+      type: linkType,
+      outwardIssue: {
+        key: inwardKey,
+        fields: { summary: inwardIssue.fields.summary, labels: inwardIssue.fields.labels, status: inwardIssue.fields.status, issuetype: inwardIssue.fields.issuetype }
+      }
+    });
+
+    // Add inward link on the inward issue (child → parent)
+    inwardIssue.fields.issuelinks.push({
+      type: linkType,
+      inwardIssue: {
+        key: outwardKey,
+        fields: { summary: outwardIssue.fields.summary, labels: outwardIssue.fields.labels, status: outwardIssue.fields.status, issuetype: outwardIssue.fields.issuetype }
+      }
+    });
+
+    return { status: 201, body: {} };
+  }
+
+  // /rest/api/2/myself
+  if (jiraPath === '/rest/api/2/myself') {
+    return { status: 200, body: USERS.ivan };
+  }
+
+  // /rest/api/2/search
+  if (jiraPath === '/rest/api/2/search') {
+    const params = new URLSearchParams(query ? query.replace('?', '') : '');
+    const jql = params.get('jql') || '';
+    const startAt = parseInt(params.get('startAt') || '0');
+    const maxResults = parseInt(params.get('maxResults') || '50');
+    const fieldsParam = params.get('fields') || '';
+
+    const filtered = filterByJql(jql);
+    const page = filtered.slice(startAt, startAt + maxResults);
+
+    return {
+      status: 200,
+      body: {
+        startAt,
+        maxResults,
+        total: filtered.length,
+        issues: page
+      }
+    };
+  }
+
+  // /rest/api/2/issue/:key
+  const issueMatch = jiraPath.match(/^\/rest\/api\/2\/issue\/([A-Z]+-\d+)$/);
+  if (issueMatch) {
+    const issue = ISSUES.find(i => i.key === issueMatch[1]);
+    if (issue) return { status: 200, body: issue };
+    return { status: 404, body: { errorMessages: ['Issue not found'] } };
+  }
+
+  // /rest/api/2/issue/:key/comment
+  const commentMatch = jiraPath.match(/^\/rest\/api\/2\/issue\/([A-Z]+-\d+)\/comment$/);
+  if (commentMatch) {
+    const issue = ISSUES.find(i => i.key === commentMatch[1]);
+    if (issue) return { status: 200, body: issue.fields.comment };
+    return { status: 404, body: { errorMessages: ['Issue not found'] } };
+  }
+
+  // /rest/api/2/status
+  if (jiraPath === '/rest/api/2/status') {
+    return { status: 200, body: Object.values(STATUSES) };
+  }
+
+  // /rest/api/2/project
+  if (jiraPath === '/rest/api/2/project') {
+    return { status: 200, body: PROJECTS };
+  }
+
+  return { status: 404, body: { errorMessages: ['Unknown endpoint'] } };
+}
+
+module.exports = { handleMockRequest };
+// handleMockRequest(jiraPath, query, method, body)
