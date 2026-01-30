@@ -490,7 +490,7 @@ class App {
       } else {
         hierarchyJql = 'labels = theme ORDER BY updated DESC';
       }
-      const data = await jiraAPI.searchIssues(hierarchyJql, 0, 50);
+      const data = await jiraAPI.searchIssues(hierarchyJql, 0, 200);
       countEl.textContent = data.total > 0 ? data.total : '';
       this.renderHierarchyList(container, data.issues, 'theme');
     } catch (err) {
@@ -553,7 +553,7 @@ class App {
       // Fetch linked issues WITH labels filter — only milestones
       const jql = `key in (${linkedKeys.join(',')}) AND labels = milestone ORDER BY updated DESC`;
       console.log(`[Hierarchy] Milestones JQL: ${jql}`);
-      const data = await jiraAPI.searchIssues(jql, 0, 50);
+      const data = await jiraAPI.searchIssues(jql, 0, 200);
       console.log(`[Hierarchy] Milestones search result: ${data.total} found, ${data.issues?.length} returned`);
       data.issues?.forEach(issue => {
         console.log(`[Hierarchy]   milestone: ${issue.key} "${issue.fields?.summary}" labels=[${issue.fields?.labels?.join(',')}]`);
@@ -601,7 +601,7 @@ class App {
 
       // Fetch linked issues EXCLUDING themes and milestones
       const jql = `key in (${linkedKeys.join(',')}) AND labels not in (theme, milestone) ORDER BY updated DESC`;
-      const data = await jiraAPI.searchIssues(jql, 0, 50);
+      const data = await jiraAPI.searchIssues(jql, 0, 200);
       tasksCount.textContent = data.total > 0 ? data.total : '';
       this.renderHierarchyTasks(tasksContainer, data.issues);
     } catch (err) {
@@ -620,19 +620,15 @@ class App {
     let html = '<div class="hierarchy-list">';
     for (const issue of issues) {
       const f = issue.fields;
-      const statusClass = UI.getStatusClass(f.status?.statusCategory?.key);
+      // Count child items (all linked issues)
+      const linksCount = (f.issuelinks || []).length;
 
       html += `
         <div class="hierarchy-row" data-key="${issue.key}" data-level="${level}">
           <div class="hierarchy-row-main">
             <span class="issue-key" data-key="${issue.key}">${issue.key}</span>
             <span class="hierarchy-summary">${UI.escapeHtml(f.summary)}</span>
-          </div>
-          <div class="hierarchy-row-meta">
-            <span class="status-badge ${statusClass}">${UI.escapeHtml(f.status?.name || '-')}</span>
-            ${f.assignee
-              ? `<span class="assignee-small">${UI.escapeHtml(f.assignee.displayName)}</span>`
-              : ''}
+            <span class="hierarchy-items-count" title="Связанных элементов">${linksCount}</span>
           </div>
         </div>
       `;
