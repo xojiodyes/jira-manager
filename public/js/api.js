@@ -182,16 +182,16 @@ class JiraAPI {
 
   /**
    * Create issue link
-   * inwardIssue = child ("is a part of" parent)
-   * outwardIssue = parent ("has part" / "consists of" child)
+   * childKey becomes outwardIssue (child "is a part of" parent)
+   * parentKey becomes inwardIssue (parent "consists of" child)
    */
-  async createIssueLink(inwardKey, outwardKey, linkTypeName = 'Part') {
+  async createIssueLink(childKey, parentKey, linkTypeName = 'Part') {
     return this.request('/rest/api/2/issueLink', {
       method: 'POST',
       body: JSON.stringify({
         type: { name: linkTypeName },
-        inwardIssue: { key: inwardKey },
-        outwardIssue: { key: outwardKey }
+        outwardIssue: { key: childKey },
+        inwardIssue: { key: parentKey }
       })
     });
   }
