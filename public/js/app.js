@@ -522,28 +522,26 @@ class App {
     milestonesContainer.innerHTML = UI.renderLoading();
 
     try {
-      // Get the theme issue to read its outward links
+      // Get the theme issue to read its links
       const theme = await jiraAPI.getIssue(issueKey);
       this.selectedThemeProject = theme.fields.project?.key || null;
       const links = theme.fields.issuelinks || [];
 
-      // Find outward linked issues that have label "milestone"
-      const milestoneKeys = [];
+      // Collect ALL linked issue keys (both outward and inward)
+      const linkedKeys = [];
       for (const link of links) {
-        const target = link.outwardIssue;
-        if (target && (target.fields?.labels || []).some(l => l.toLowerCase() === 'milestone')) {
-          milestoneKeys.push(target.key);
-        }
+        if (link.outwardIssue) linkedKeys.push(link.outwardIssue.key);
+        if (link.inwardIssue) linkedKeys.push(link.inwardIssue.key);
       }
 
-      if (milestoneKeys.length === 0) {
+      if (linkedKeys.length === 0) {
         milestonesContainer.innerHTML = UI.renderEmpty('🎯', 'Нет связанных milestones');
         milestonesCount.textContent = '';
         return;
       }
 
-      // Fetch full details of milestone issues
-      const jql = `key in (${milestoneKeys.join(',')}) ORDER BY updated DESC`;
+      // Fetch linked issues WITH labels filter — only milestones
+      const jql = `key in (${linkedKeys.join(',')}) AND labels = milestone ORDER BY updated DESC`;
       const data = await jiraAPI.searchIssues(jql, 0, 50);
       milestonesCount.textContent = data.total > 0 ? data.total : '';
       this.renderHierarchyList(milestonesContainer, data.issues, 'milestone');
@@ -568,30 +566,26 @@ class App {
     tasksContainer.innerHTML = UI.renderLoading();
 
     try {
-      // Get the milestone issue to read its outward links
+      // Get the milestone issue to read its links
       const milestone = await jiraAPI.getIssue(issueKey);
       this.selectedMilestoneProject = milestone.fields.project?.key || null;
       const links = milestone.fields.issuelinks || [];
 
-      // Find outward linked issues that are NOT themes or milestones
-      const taskKeys = [];
+      // Collect ALL linked issue keys (both outward and inward)
+      const linkedKeys = [];
       for (const link of links) {
-        const target = link.outwardIssue;
-        if (!target) continue;
-        const labels = (target.fields?.labels || []).map(l => l.toLowerCase());
-        if (!labels.includes('theme') && !labels.includes('milestone')) {
-          taskKeys.push(target.key);
-        }
+        if (link.outwardIssue) linkedKeys.push(link.outwardIssue.key);
+        if (link.inwardIssue) linkedKeys.push(link.inwardIssue.key);
       }
 
-      if (taskKeys.length === 0) {
+      if (linkedKeys.length === 0) {
         tasksContainer.innerHTML = UI.renderEmpty('📋', 'Нет связанных задач');
         tasksCount.textContent = '';
         return;
       }
 
-      // Fetch full details
-      const jql = `key in (${taskKeys.join(',')}) ORDER BY updated DESC`;
+      // Fetch linked issues EXCLUDING themes and milestones
+      const jql = `key in (${linkedKeys.join(',')}) AND labels not in (theme, milestone) ORDER BY updated DESC`;
       const data = await jiraAPI.searchIssues(jql, 0, 50);
       tasksCount.textContent = data.total > 0 ? data.total : '';
       this.renderHierarchyTasks(tasksContainer, data.issues);
