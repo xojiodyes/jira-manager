@@ -90,6 +90,7 @@ class App {
   renderJqlDropdown() {
     const dropdown = document.getElementById('jqlDropdown');
     const removeBtn = document.getElementById('removeJqlBtn');
+    const editBtn = document.getElementById('editJqlBtn');
 
     let html = '<option value="-1">— Select JQL —</option>';
     this.jqlFilters.forEach((f, i) => {
@@ -98,8 +99,10 @@ class App {
     });
     dropdown.innerHTML = html;
 
-    // Show/hide remove button
-    removeBtn.style.display = this.selectedJqlIndex >= 0 ? '' : 'none';
+    // Show/hide edit & remove buttons
+    const hasSelection = this.selectedJqlIndex >= 0;
+    removeBtn.style.display = hasSelection ? '' : 'none';
+    editBtn.style.display = hasSelection ? '' : 'none';
   }
 
   getSelectedJql() {
@@ -134,6 +137,8 @@ class App {
   }
 
   openAddJqlModal() {
+    this._editingJqlIndex = -1;
+    document.querySelector('#addJqlModal .modal-header h3').textContent = 'Add JQL';
     document.getElementById('jqlName').value = '';
     document.getElementById('jqlQuery').value = '';
     document.getElementById('jqlLinkType').value = '';
@@ -141,7 +146,19 @@ class App {
     document.getElementById('jqlName').focus();
   }
 
-  saveNewJql() {
+  openEditJqlModal() {
+    if (this.selectedJqlIndex < 0) return;
+    const f = this.jqlFilters[this.selectedJqlIndex];
+    this._editingJqlIndex = this.selectedJqlIndex;
+    document.querySelector('#addJqlModal .modal-header h3').textContent = 'Edit JQL';
+    document.getElementById('jqlName').value = f.name;
+    document.getElementById('jqlQuery').value = f.jql;
+    document.getElementById('jqlLinkType').value = f.linkType || '';
+    UI.openModal('addJqlModal');
+    document.getElementById('jqlName').focus();
+  }
+
+  saveJqlFromModal() {
     const name = document.getElementById('jqlName').value.trim();
     const jql = document.getElementById('jqlQuery').value.trim();
     const linkType = document.getElementById('jqlLinkType').value.trim();
@@ -155,14 +172,24 @@ class App {
       return;
     }
 
-    this.jqlFilters.push({ name, jql, linkType: linkType || 'Relates' });
-    this.selectedJqlIndex = this.jqlFilters.length - 1;
+    const entry = { name, jql, linkType: linkType || 'Relates' };
+
+    if (this._editingJqlIndex >= 0) {
+      // Edit existing
+      this.jqlFilters[this._editingJqlIndex] = entry;
+      UI.toast(`JQL "${name}" updated`, 'success');
+    } else {
+      // Add new
+      this.jqlFilters.push(entry);
+      this.selectedJqlIndex = this.jqlFilters.length - 1;
+      UI.toast(`JQL "${name}" added`, 'success');
+    }
+
     this.saveJqlFilters();
     this.renderJqlDropdown();
     this.updatePageTitle();
     UI.closeModal('addJqlModal');
     this.loadThemes();
-    UI.toast(`JQL "${name}" added`, 'success');
   }
 
   removeSelectedJql() {
@@ -187,6 +214,10 @@ class App {
       this.openAddJqlModal();
     });
 
+    document.getElementById('editJqlBtn').addEventListener('click', () => {
+      this.openEditJqlModal();
+    });
+
     document.getElementById('removeJqlBtn').addEventListener('click', () => {
       this.removeSelectedJql();
     });
@@ -201,7 +232,7 @@ class App {
     });
 
     document.getElementById('saveJqlBtn').addEventListener('click', () => {
-      this.saveNewJql();
+      this.saveJqlFromModal();
     });
 
     // Issue modal
