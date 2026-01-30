@@ -792,8 +792,8 @@ class App {
     const projectKey = this.selectedThemeProject;
     const result = await jiraAPI.createIssue(projectKey, summary, 'Story', ['milestone']);
 
-    // Link milestone to theme
-    await jiraAPI.createIssueLink(this.selectedThemeKey, result.key, this.getSelectedLinkType());
+    // Link milestone to theme (milestone "is a part of" theme)
+    await jiraAPI.createIssueLink(result.key, this.selectedThemeKey, this.getSelectedLinkType());
     UI.toast(`Milestone ${result.key} created`, 'success');
 
     // Reload milestones for current theme
@@ -810,8 +810,8 @@ class App {
     const issueType = document.getElementById('inlineIssueType')?.value || 'Story';
     const result = await jiraAPI.createIssue(projectKey, summary, issueType, []);
 
-    // Link task to milestone
-    await jiraAPI.createIssueLink(this.selectedMilestoneKey, result.key, this.getSelectedLinkType());
+    // Link task to milestone (task "is a part of" milestone)
+    await jiraAPI.createIssueLink(result.key, this.selectedMilestoneKey, this.getSelectedLinkType());
     UI.toast(`${issueType} ${result.key} created`, 'success');
 
     // Reload tasks for current milestone
