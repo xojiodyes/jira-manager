@@ -70,12 +70,12 @@
           </div>
         </div>
 
-        <!-- Row 2: Tasks -->
-        <div class="hierarchy-row-bottom">
-          <div class="hierarchy-panel hierarchy-panel-full">
+        <!-- Row 2: Epics/Stories (full width) -->
+        <div class="hierarchy-row-middle">
+          <div class="hierarchy-panel">
             <div class="card">
               <div class="card-header">
-                <h3>Tasks</h3>
+                <h3>Epics/Stories</h3>
                 <div class="card-header-right">
                   <span class="results-count" id="hierarchyTasksCount"></span>
                   <button class="btn-icon" id="addTaskBtn" title="Add Task" disabled>+</button>
@@ -85,6 +85,27 @@
                 <div class="empty-state">
                   <div class="empty-state-icon">📋</div>
                   <p>Select a Milestone</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 3: Epic Tasks (full width) -->
+        <div class="hierarchy-row-bottom">
+          <div class="hierarchy-panel">
+            <div class="card">
+              <div class="card-header">
+                <h3>Epic Tasks</h3>
+                <div class="card-header-right">
+                  <span class="results-count" id="epicTasksCount"></span>
+                  <button class="btn-icon" id="addEpicTaskBtn" title="Add Epic Task" disabled>+</button>
+                </div>
+              </div>
+              <div class="card-body no-padding" id="epicTasksContainer">
+                <div class="empty-state">
+                  <div class="empty-state-icon">📋</div>
+                  <p>Select an Epic</p>
                 </div>
               </div>
             </div>

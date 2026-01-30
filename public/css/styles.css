@@ -751,14 +751,25 @@ a:hover {
 
 .hierarchy-row-top .hierarchy-panel .card {
   margin-bottom: 0;
-  height: calc(50vh - var(--header-height) / 2 - 32px);
+  height: calc(50vh - var(--header-height) / 2 - 24px);
   display: flex;
   flex-direction: column;
 }
 
-.hierarchy-row-bottom .hierarchy-panel-full .card {
+.hierarchy-row-middle {
+  margin-bottom: 16px;
+}
+
+.hierarchy-row-middle .hierarchy-panel .card {
   margin-bottom: 0;
-  height: calc(50vh - var(--header-height) / 2 - 32px);
+  height: calc(50vh - var(--header-height) / 2 - 24px);
+  display: flex;
+  flex-direction: column;
+}
+
+.hierarchy-row-bottom .hierarchy-panel .card {
+  margin-bottom: 0;
+  height: calc(50vh - var(--header-height) / 2 - 24px);
   display: flex;
   flex-direction: column;
 }
@@ -1140,6 +1151,54 @@ tr:hover .table-jira-link {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 2px rgba(0,82,204,0.15);
+}
+
+/* Compact issue type (single letter) */
+.issue-type-compact {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+/* Keyboard navigation highlight */
+.hierarchy-row.kb-highlight {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+tr.kb-highlight td {
+  outline: none;
+  box-shadow: inset 0 2px 0 0 var(--color-primary), inset 0 -2px 0 0 var(--color-primary);
+}
+
+tr.kb-highlight td:first-child {
+  box-shadow: inset 2px 2px 0 0 var(--color-primary), inset 0 -2px 0 0 var(--color-primary);
+}
+
+tr.kb-highlight td:last-child {
+  box-shadow: inset 0 2px 0 0 var(--color-primary), inset -2px -2px 0 0 var(--color-primary);
+}
+
+/* Epic row in tasks table */
+tr.epic-row {
+  cursor: pointer;
+}
+
+tr.epic-row:hover td {
+  background: #deebff;
+}
+
+tr.epic-row.selected td {
+  background: #deebff;
+  border-left-color: var(--color-primary);
 }
 
 .btn-icon-danger:hover {

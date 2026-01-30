@@ -120,7 +120,7 @@ const ISSUES = [
       labels: ['Milestone'],
       created: daysAgo(28),
       updated: daysAgo(1),
-      issuelinks: [inwardLink('PROJ-10'), outwardLink('PROJ-1'), outwardLink('PROJ-2')],
+      issuelinks: [inwardLink('PROJ-10'), outwardLink('PROJ-1'), outwardLink('PROJ-2'), outwardLink('PROJ-20')],
       comment: { comments: [], total: 0 }
     }
   },
@@ -155,6 +155,59 @@ const ISSUES = [
       created: daysAgo(15),
       updated: hoursAgo(2),
       issuelinks: [inwardLink('PROJ-11'), outwardLink('DEMO-1'), outwardLink('DEMO-3')],
+      comment: { comments: [], total: 0 }
+    }
+  },
+
+  // === EPICS ===
+  {
+    id: '10020', key: 'PROJ-20',
+    fields: {
+      summary: 'OAuth Integration Epic',
+      description: 'Epic for all OAuth-related tasks.',
+      status: STATUSES.inProgress,
+      assignee: USERS.ivan,
+      priority: PRIORITIES.high,
+      issuetype: ISSUE_TYPES.epic,
+      project: PROJECTS[0],
+      labels: [],
+      created: daysAgo(25),
+      updated: daysAgo(1),
+      issuelinks: [inwardLink('PROJ-12'), outwardLink('PROJ-21'), outwardLink('PROJ-22')],
+      comment: { comments: [], total: 0 }
+    }
+  },
+  {
+    id: '10021', key: 'PROJ-21',
+    fields: {
+      summary: 'Implement Google OAuth provider',
+      description: 'Add Google as an OAuth provider.',
+      status: STATUSES.inProgress,
+      assignee: USERS.ivan,
+      priority: PRIORITIES.high,
+      issuetype: ISSUE_TYPES.task,
+      project: PROJECTS[0],
+      labels: [],
+      created: daysAgo(20),
+      updated: daysAgo(1),
+      issuelinks: [inwardLink('PROJ-20')],
+      comment: { comments: [], total: 0 }
+    }
+  },
+  {
+    id: '10022', key: 'PROJ-22',
+    fields: {
+      summary: 'Implement GitHub OAuth provider',
+      description: 'Add GitHub as an OAuth provider.',
+      status: STATUSES.todo,
+      assignee: USERS.anna,
+      priority: PRIORITIES.medium,
+      issuetype: ISSUE_TYPES.task,
+      project: PROJECTS[0],
+      labels: [],
+      created: daysAgo(20),
+      updated: daysAgo(3),
+      issuelinks: [inwardLink('PROJ-20')],
       comment: { comments: [], total: 0 }
     }
   },
@@ -356,11 +409,26 @@ function filterByJql(jql) {
     filtered = filtered.filter(i => keys.includes(i.key));
   }
 
-  // labels = X (case-insensitive)
-  const labelMatch = lower.match(/labels\s*=\s*['"]?(\w+)['"]?/);
-  if (labelMatch) {
-    const lbl = labelMatch[1].toLowerCase();
-    filtered = filtered.filter(i => (i.fields.labels || []).some(l => l.toLowerCase() === lbl));
+  // Complex label filter: (labels is EMPTY OR (labels != X AND labels != Y))
+  const complexLabelMatch = lower.match(/\(labels\s+is\s+empty\s+or\s+\(([^)]+)\)\)/);
+  if (complexLabelMatch) {
+    const conditions = complexLabelMatch[1];
+    const neqMatches = [...conditions.matchAll(/labels\s*!=\s*['"]?(\w+)['"]?/gi)];
+    const excludedLabels = neqMatches.map(m => m[1].toLowerCase());
+    filtered = filtered.filter(i => {
+      const labels = (i.fields.labels || []).map(l => l.toLowerCase());
+      if (labels.length === 0) return true;
+      return !labels.some(l => excludedLabels.includes(l));
+    });
+  }
+
+  // labels = X (case-insensitive) — only if not already handled by complex filter
+  if (!complexLabelMatch) {
+    const labelMatch = lower.match(/labels\s*=\s*['"]?(\w+)['"]?/);
+    if (labelMatch) {
+      const lbl = labelMatch[1].toLowerCase();
+      filtered = filtered.filter(i => (i.fields.labels || []).some(l => l.toLowerCase() === lbl));
+    }
   }
 
   // labels in (X, Y)
@@ -572,6 +640,18 @@ function handleMockRequest(jiraPath, query, method, reqBody) {
   // /rest/api/2/project
   if (jiraPath === '/rest/api/2/project') {
     return { status: 200, body: PROJECTS };
+  }
+
+  // /rest/api/2/issueLinkType
+  if (jiraPath === '/rest/api/2/issueLinkType') {
+    return { status: 200, body: { issueLinkTypes: [
+      { id: '10000', name: 'Hierarchy', inward: 'is child of', outward: 'is parent of' },
+      { id: '10001', name: 'Relates', inward: 'relates to', outward: 'relates to' },
+      { id: '10002', name: 'Blocks', inward: 'is blocked by', outward: 'blocks' },
+      { id: '10003', name: 'Cloners', inward: 'is cloned by', outward: 'clones' },
+      { id: '10004', name: 'Duplicate', inward: 'is duplicated by', outward: 'duplicates' },
+      { id: '10005', name: 'Part', inward: 'consists of', outward: 'is a part of' }
+    ] } };
   }
 
   return { status: 404, body: { errorMessages: ['Unknown endpoint'] } };

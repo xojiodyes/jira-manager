@@ -10,6 +10,8 @@ class App {
     this.selectedThemeProject = null;
     this.selectedMilestoneKey = null;
     this.selectedMilestoneProject = null;
+    this.selectedEpicKey = null;
+    this.selectedEpicProject = null;
 
     // Local data (status, confidence per issue key)
     this.localData = {};
@@ -17,6 +19,10 @@ class App {
     // JQL filters
     this.jqlFilters = []; // [{ name, jql }]
     this.selectedJqlIndex = -1; // -1 = no filter
+
+    // Keyboard navigation
+    this.activePanel = 'themes';
+    this.highlightedIndex = { themes: 0, milestones: -1, tasks: -1, epicTasks: -1 };
 
     this.init();
   }
@@ -266,6 +272,9 @@ class App {
     document.getElementById('addTaskBtn').addEventListener('click', () => {
       this.showInlineForm('tasks');
     });
+    document.getElementById('addEpicTaskBtn').addEventListener('click', () => {
+      this.showInlineForm('epicTasks');
+    });
 
     // Modal backdrop click
     document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
@@ -274,13 +283,16 @@ class App {
       });
     });
 
-    // ESC to close modals
+    // ESC/ArrowLeft to close modals + keyboard navigation
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' || (e.key === 'ArrowLeft' && document.querySelector('.modal.active'))) {
         document.querySelectorAll('.modal.active').forEach(modal => {
           modal.classList.remove('active');
         });
+        e.preventDefault();
+        return;
       }
+      this.handleKeyboardNav(e);
     });
   }
 
@@ -451,10 +463,12 @@ class App {
     this.selectedMilestoneProject = null;
     document.getElementById('addMilestoneBtn').disabled = true;
     document.getElementById('addTaskBtn').disabled = true;
+    document.getElementById('addEpicTaskBtn').disabled = true;
     document.getElementById('milestonesContainer').innerHTML = UI.renderEmpty('🎯', 'Select a Theme');
     document.getElementById('milestonesCount').textContent = '';
     document.getElementById('hierarchyTasksContainer').innerHTML = UI.renderEmpty('📋', 'Select a Milestone');
     document.getElementById('hierarchyTasksCount').textContent = '';
+    this.resetEpicTasksPanel();
 
     try {
       // Always filter by label "theme"; combine with selected JQL filter or server config
@@ -478,6 +492,20 @@ class App {
       const data = await jiraAPI.searchIssues(hierarchyJql, 0, 200);
       countEl.textContent = data.total > 0 ? data.total : '';
       this.renderHierarchyList(container, data.issues, 'theme');
+
+      // Keyboard: highlight first theme and auto-select it with full cascade
+      this.activePanel = 'themes';
+      this.highlightedIndex.themes = data.issues.length > 0 ? 0 : -1;
+      this.applyHighlight('themes');
+      if (data.issues.length > 0) {
+        this._kbStayInPanel = 'themes';
+        this.selectTheme(data.issues[0].key).then(async () => {
+          await this._cascadeSelectFirst('milestones');
+          this.activePanel = 'themes';
+          this.applyHighlight('themes');
+          this._kbStayInPanel = null;
+        });
+      }
     } catch (err) {
       container.innerHTML = UI.renderError(err.message);
     }
@@ -496,10 +524,12 @@ class App {
     // Enable milestone button, disable task button
     document.getElementById('addMilestoneBtn').disabled = false;
     document.getElementById('addTaskBtn').disabled = true;
+    document.getElementById('addEpicTaskBtn').disabled = true;
 
     // Reset tasks panel
     document.getElementById('hierarchyTasksContainer').innerHTML = UI.renderEmpty('📋', 'Select a Milestone');
     document.getElementById('hierarchyTasksCount').textContent = '';
+    this.resetEpicTasksPanel();
 
     // Load milestones linked to this theme
     const milestonesContainer = document.getElementById('milestonesContainer');
@@ -550,6 +580,11 @@ class App {
       milestonesContainer.classList.remove('loading-overlay');
       milestonesCount.textContent = data.total > 0 ? data.total : '';
       this.renderHierarchyList(milestonesContainer, data.issues, 'milestone');
+
+      // Keyboard: highlight first milestone
+      this.activePanel = 'milestones';
+      this.highlightedIndex.milestones = data.issues.length > 0 ? 0 : -1;
+      this.applyHighlight('milestones');
     } catch (err) {
       milestonesContainer.classList.remove('loading-overlay');
       milestonesContainer.innerHTML = UI.renderError(err.message);
@@ -566,6 +601,8 @@ class App {
 
     // Enable task button
     document.getElementById('addTaskBtn').disabled = false;
+    document.getElementById('addEpicTaskBtn').disabled = true;
+    this.resetEpicTasksPanel();
 
     const tasksContainer = document.getElementById('hierarchyTasksContainer');
     const tasksCount = document.getElementById('hierarchyTasksCount');
@@ -602,6 +639,11 @@ class App {
       tasksContainer.classList.remove('loading-overlay');
       tasksCount.textContent = data.total > 0 ? data.total : '';
       this.renderHierarchyTasks(tasksContainer, data.issues);
+
+      // Keyboard: highlight first task
+      this.activePanel = 'tasks';
+      this.highlightedIndex.tasks = data.issues.length > 0 ? 0 : -1;
+      this.applyHighlight('tasks');
     } catch (err) {
       tasksContainer.classList.remove('loading-overlay');
       tasksContainer.innerHTML = UI.renderError(err.message);
@@ -686,7 +728,8 @@ class App {
     const containerIds = {
       themes: 'themesContainer',
       milestones: 'milestonesContainer',
-      tasks: 'hierarchyTasksContainer'
+      tasks: 'hierarchyTasksContainer',
+      epicTasks: 'epicTasksContainer'
     };
     const container = document.getElementById(containerIds[panel]);
 
@@ -709,8 +752,8 @@ class App {
       `;
     }
 
-    // For tasks: type dropdown
-    if (panel === 'tasks') {
+    // For tasks or epicTasks: type dropdown
+    if (panel === 'tasks' || panel === 'epicTasks') {
       extraFields = `
         <select class="input input-sm inline-type-select" id="inlineIssueType">
           <option value="Story">Story</option>
@@ -763,6 +806,8 @@ class App {
         await this.createMilestone(summary);
       } else if (panel === 'tasks') {
         await this.createTask(summary);
+      } else if (panel === 'epicTasks') {
+        await this.createEpicTask(summary);
       }
     } catch (err) {
       UI.toast(`Error: ${err.message}`, 'error');
@@ -818,38 +863,124 @@ class App {
     await this.selectMilestone(this.selectedMilestoneKey);
   }
 
-  renderHierarchyTasks(container, issues) {
+  resetEpicTasksPanel() {
+    this.selectedEpicKey = null;
+    this.selectedEpicProject = null;
+    document.getElementById('epicTasksContainer').innerHTML = UI.renderEmpty('📋', 'Select an Epic');
+    document.getElementById('epicTasksCount').textContent = '';
+    document.getElementById('addEpicTaskBtn').disabled = true;
+  }
+
+  async selectEpic(issueKey) {
+    this.selectedEpicKey = issueKey;
+
+    // Highlight selected epic row
+    document.querySelectorAll('#hierarchyTasksContainer tr.epic-row').forEach(row => {
+      row.classList.toggle('selected', row.dataset.key === issueKey);
+    });
+
+    // Enable epic task button
+    document.getElementById('addEpicTaskBtn').disabled = false;
+
+    const container = document.getElementById('epicTasksContainer');
+    const countEl = document.getElementById('epicTasksCount');
+    container.classList.add('loading-overlay');
+
+    try {
+      const epic = await jiraAPI.getIssue(issueKey);
+      this.selectedEpicProject = epic.fields.project?.key || null;
+      const links = epic.fields.issuelinks || [];
+
+      // Collect linked keys excluding clones/duplicates/themes/milestones
+      const EXCLUDED = ['cloners', 'duplicate'];
+      const linkedKeys = [];
+      for (const link of links) {
+        const typeName = (link.type?.name || '').toLowerCase();
+        if (EXCLUDED.some(ex => typeName.includes(ex))) continue;
+        if (link.outwardIssue) linkedKeys.push(link.outwardIssue.key);
+        if (link.inwardIssue) linkedKeys.push(link.inwardIssue.key);
+      }
+
+      if (linkedKeys.length === 0) {
+        container.classList.remove('loading-overlay');
+        container.innerHTML = UI.renderEmpty('📋', 'No linked tasks');
+        countEl.textContent = '';
+        return;
+      }
+
+      // Fetch linked issues excluding themes and milestones
+      const jql = `key in (${linkedKeys.join(',')}) AND (labels is EMPTY OR (labels != theme AND labels != milestone)) ORDER BY updated DESC`;
+      const data = await jiraAPI.searchIssues(jql, 0, 200);
+      container.classList.remove('loading-overlay');
+      countEl.textContent = data.total > 0 ? data.total : '';
+      this.renderHierarchyTasks(container, data.issues, 'epicSubTasks');
+
+      // Keyboard: highlight first epic task
+      this.activePanel = 'epicTasks';
+      this.highlightedIndex.epicTasks = data.issues.length > 0 ? 0 : -1;
+      this.applyHighlight('epicTasks');
+    } catch (err) {
+      container.classList.remove('loading-overlay');
+      container.innerHTML = UI.renderError(err.message);
+    }
+  }
+
+  async createEpicTask(summary) {
+    if (!this.selectedEpicKey || !this.selectedEpicProject) {
+      UI.toast('Select an Epic first', 'error');
+      return;
+    }
+
+    const projectKey = this.selectedEpicProject;
+    const issueType = document.getElementById('inlineIssueType')?.value || 'Story';
+    const result = await jiraAPI.createIssue(projectKey, summary, issueType, []);
+
+    // Link task to epic
+    await jiraAPI.createIssueLink(result.key, this.selectedEpicKey, this.getSelectedLinkType());
+    UI.toast(`${issueType} ${result.key} created`, 'success');
+
+    // Reload epic tasks
+    await this.selectEpic(this.selectedEpicKey);
+  }
+
+  /**
+   * Render tasks table
+   * @param {string} context - 'epicTasks' (no Jira Status, no Priority), 'epicSubTasks' (no Jira Status, no Priority), or 'default' (all columns)
+   */
+  renderHierarchyTasks(container, issues, context = 'epicTasks') {
     if (issues.length === 0) {
       container.innerHTML = UI.renderEmpty('📋', 'No tasks');
       return;
     }
 
+    const showJiraStatus = context !== 'epicTasks' && context !== 'epicSubTasks';
+    const showPriority = context !== 'epicTasks' && context !== 'epicSubTasks';
+    const showLocalFields = context !== 'epicSubTasks';
+    const compactType = context === 'epicTasks' || context === 'epicSubTasks';
+
+    let colgroup = '<colgroup>';
+    colgroup += compactType ? '<col style="width: 32px;">' : '<col style="width: 90px;">';   // Type
+    colgroup += '<col style="width: 130px;">';  // Key
+    colgroup += '<col>';                         // Summary
+    if (showJiraStatus) colgroup += '<col style="width: 120px;">'; // Jira Status
+    if (showLocalFields) colgroup += '<col style="width: 80px;">';   // Status %
+    if (showLocalFields) colgroup += '<col style="width: 80px;">';   // Confid. %
+    if (showPriority) colgroup += '<col style="width: 100px;">';   // Priority
+    colgroup += '<col style="width: 140px;">';  // Assignee
+    colgroup += '<col style="width: 36px;">';   // Link
+    colgroup += '</colgroup>';
+
+    let thead = compactType ? '<tr><th>T</th>' : '<tr><th>Type</th>';
+    thead += '<th>Key</th><th>Summary</th>';
+    if (showJiraStatus) thead += '<th>Jira Status</th>';
+    if (showLocalFields) thead += '<th>Status %</th><th>Confid. %</th>';
+    if (showPriority) thead += '<th>Priority</th>';
+    thead += '<th>Assignee</th><th></th></tr>';
+
     let html = `
       <table class="issues-table issues-table-fixed">
-        <colgroup>
-          <col style="width: 90px;">
-          <col style="width: 130px;">
-          <col>
-          <col style="width: 120px;">
-          <col style="width: 80px;">
-          <col style="width: 80px;">
-          <col style="width: 100px;">
-          <col style="width: 140px;">
-          <col style="width: 36px;">
-        </colgroup>
-        <thead>
-          <tr>
-            <th>Type</th>
-            <th>Key</th>
-            <th>Summary</th>
-            <th>Jira Status</th>
-            <th>Status %</th>
-            <th>Confid. %</th>
-            <th>Priority</th>
-            <th>Assignee</th>
-            <th></th>
-          </tr>
-        </thead>
+        ${colgroup}
+        <thead>${thead}</thead>
         <tbody>
     `;
 
@@ -858,31 +989,46 @@ class App {
       const statusClass = UI.getStatusClass(f.status?.statusCategory?.key);
       const localStatus = this.getLocalField(issue.key, 'status');
       const localConfidence = this.getLocalField(issue.key, 'confidence');
+      const isEpic = f.issuetype?.name === 'Epic';
 
       html += `
-        <tr>
-          <td>
-            <span class="issue-type">
-              ${f.issuetype?.iconUrl ? `<img src="${f.issuetype.iconUrl}" class="issue-type-icon" alt="">` : ''}
-              ${UI.escapeHtml(f.issuetype?.name || '-')}
-            </span>
+        <tr class="${isEpic ? 'epic-row' : ''}" data-key="${issue.key}">
+          <td>${compactType
+            ? `<span class="issue-type-compact" title="${UI.escapeHtml(f.issuetype?.name || '-')}">${UI.escapeHtml((f.issuetype?.name || '-')[0])}</span>`
+            : `<span class="issue-type">
+                ${f.issuetype?.iconUrl ? `<img src="${f.issuetype.iconUrl}" class="issue-type-icon" alt="">` : ''}
+                ${UI.escapeHtml(f.issuetype?.name || '-')}
+              </span>`}
           </td>
           <td>
             <span class="issue-key" data-key="${issue.key}">${issue.key}</span>
           </td>
           <td>
             <div class="issue-summary" title="${UI.escapeHtml(f.summary)}">${UI.escapeHtml(f.summary || '-')}</div>
-          </td>
+          </td>`;
+
+      if (showJiraStatus) {
+        html += `
           <td>
             <span class="status-badge ${statusClass}">${UI.escapeHtml(f.status?.name || '-')}</span>
-          </td>
+          </td>`;
+      }
+
+      if (showLocalFields) {
+        html += `
           <td>
             <span class="editable-field editable-status" data-key="${issue.key}" data-field="status" title="Status (0-100)">${localStatus !== null ? localStatus + '%' : '—'}</span>
           </td>
           <td>
             <span class="editable-field editable-confidence" data-key="${issue.key}" data-field="confidence" title="Confidence (0-100)">${localConfidence !== null ? localConfidence + '%' : '—'}</span>
-          </td>
-          <td>${UI.escapeHtml(f.priority?.name || '-')}</td>
+          </td>`;
+      }
+
+      if (showPriority) {
+        html += `<td>${UI.escapeHtml(f.priority?.name || '-')}</td>`;
+      }
+
+      html += `
           <td>
             ${f.assignee
               ? `<span class="assignee">
@@ -914,7 +1060,171 @@ class App {
         this.startInlineEdit(el);
       });
     });
+
+    // Make epic rows clickable to load their child tasks
+    container.querySelectorAll('tr.epic-row').forEach(row => {
+      row.style.cursor = 'pointer';
+      row.addEventListener('click', (e) => {
+        // Don't trigger if clicking on issue-key or editable-field
+        if (e.target.classList.contains('issue-key') || e.target.classList.contains('editable-field')) return;
+        this.selectEpic(row.dataset.key);
+      });
+    });
   }
+  // === KEYBOARD NAVIGATION ===
+
+  static PANELS = ['themes', 'milestones', 'tasks', 'epicTasks'];
+  static PANEL_CONFIG = {
+    themes:     { containerId: 'themesContainer',         rowSelector: '.hierarchy-row' },
+    milestones: { containerId: 'milestonesContainer',     rowSelector: '.hierarchy-row' },
+    tasks:      { containerId: 'hierarchyTasksContainer', rowSelector: 'tr[data-key]' },
+    epicTasks:  { containerId: 'epicTasksContainer',      rowSelector: 'tr[data-key]' }
+  };
+
+  getPanelRows(panel) {
+    const cfg = App.PANEL_CONFIG[panel];
+    const container = document.getElementById(cfg.containerId);
+    return container ? Array.from(container.querySelectorAll(cfg.rowSelector)) : [];
+  }
+
+  applyHighlight(panel) {
+    // Remove highlights from ALL panels
+    for (const p of App.PANELS) {
+      this.getPanelRows(p).forEach(r => r.classList.remove('kb-highlight'));
+    }
+    // Apply highlight in the active panel
+    const rows = this.getPanelRows(panel);
+    const idx = this.highlightedIndex[panel];
+    if (idx >= 0 && idx < rows.length) {
+      rows[idx].classList.add('kb-highlight');
+      rows[idx].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  getHighlightedKey(panel) {
+    const rows = this.getPanelRows(panel);
+    const idx = this.highlightedIndex[panel];
+    if (idx >= 0 && idx < rows.length) {
+      return rows[idx].dataset.key;
+    }
+    return null;
+  }
+
+  handleKeyboardNav(e) {
+    // Ignore if modal is open or focus is on input
+    if (document.querySelector('.modal.active')) return;
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+    const panel = this.activePanel;
+    const rows = this.getPanelRows(panel);
+    if (rows.length === 0 && e.key !== 'ArrowLeft') return;
+
+    switch (e.key) {
+      case 'ArrowDown': {
+        e.preventDefault();
+        const max = rows.length - 1;
+        this.highlightedIndex[panel] = Math.min((this.highlightedIndex[panel] ?? -1) + 1, max);
+        this.applyHighlight(panel);
+        this._autoSelectPanel(panel);
+        break;
+      }
+      case 'ArrowUp': {
+        e.preventDefault();
+        this.highlightedIndex[panel] = Math.max((this.highlightedIndex[panel] ?? 0) - 1, 0);
+        this.applyHighlight(panel);
+        this._autoSelectPanel(panel);
+        break;
+      }
+      case 'ArrowRight': {
+        e.preventDefault();
+        const panelIdxR = App.PANELS.indexOf(panel);
+        if (panelIdxR < App.PANELS.length - 1) {
+          // For tasks→epicTasks, only allow if current row is an epic
+          if (panel === 'tasks') {
+            const row = rows[this.highlightedIndex[panel]];
+            if (!row || !row.classList.contains('epic-row')) break;
+          }
+          const nextPanel = App.PANELS[panelIdxR + 1];
+          const nextRows = this.getPanelRows(nextPanel);
+          if (nextRows.length > 0) {
+            this.activePanel = nextPanel;
+            if (this.highlightedIndex[nextPanel] < 0) {
+              this.highlightedIndex[nextPanel] = 0;
+            }
+            this.applyHighlight(this.activePanel);
+          }
+        }
+        break;
+      }
+      case 'ArrowLeft': {
+        e.preventDefault();
+        const panelIdx = App.PANELS.indexOf(panel);
+        if (panelIdx > 0) {
+          this.activePanel = App.PANELS[panelIdx - 1];
+          this.applyHighlight(this.activePanel);
+        }
+        break;
+      }
+      case 'Enter': {
+        e.preventDefault();
+        const detailKey = this.getHighlightedKey(panel);
+        if (detailKey) {
+          this.showIssueDetail(detailKey);
+        }
+        break;
+      }
+    }
+  }
+
+  async _autoSelectPanel(panel) {
+    const key = this.getHighlightedKey(panel);
+    if (!key) return;
+    const stayPanel = panel;
+    this._kbStayInPanel = stayPanel;
+    try {
+      if (panel === 'themes') {
+        await this.selectTheme(key);
+        // Cascade: auto-select first milestone
+        await this._cascadeSelectFirst('milestones');
+      } else if (panel === 'milestones') {
+        await this.selectMilestone(key);
+        // Cascade: auto-select first task/epic
+        await this._cascadeSelectFirst('tasks');
+      } else if (panel === 'tasks') {
+        const rows = this.getPanelRows(panel);
+        const row = rows[this.highlightedIndex[panel]];
+        if (row && row.classList.contains('epic-row')) {
+          await this.selectEpic(key);
+        }
+      }
+    } finally {
+      this.activePanel = stayPanel;
+      this.applyHighlight(stayPanel);
+      this._kbStayInPanel = null;
+    }
+  }
+
+  async _cascadeSelectFirst(panel) {
+    const rows = this.getPanelRows(panel);
+    if (rows.length === 0) return;
+    this.highlightedIndex[panel] = 0;
+    const key = rows[0].dataset.key;
+    if (!key) return;
+
+    if (panel === 'milestones') {
+      await this.selectMilestone(key);
+      // Continue cascade into tasks
+      await this._cascadeSelectFirst('tasks');
+    } else if (panel === 'tasks') {
+      // If first task is an epic, auto-select it to load epic tasks
+      const row = rows[0];
+      if (row && row.classList.contains('epic-row')) {
+        await this.selectEpic(key);
+      }
+    }
+  }
+
   // === INLINE EDITING ===
 
   startInlineEdit(el) {
