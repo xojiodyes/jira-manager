@@ -22,6 +22,17 @@ if (MODE === 'real') {
       console.error('config.json должен содержать: jiraHost, jiraUser, apiToken');
       process.exit(1);
     }
+    // Normalize jiraHost: parse full URL to extract hostname + basePath
+    // Supports: "domain.com", "https://domain.com", "https://domain.com/jira02"
+    let hostRaw = CONFIG.jiraHost;
+    if (!hostRaw.startsWith('http')) {
+      hostRaw = 'https://' + hostRaw;
+    }
+    const parsedHost = new URL(hostRaw);
+    CONFIG._hostname = parsedHost.hostname;
+    CONFIG._port = parsedHost.port || (parsedHost.protocol === 'https:' ? 443 : 80);
+    CONFIG._protocol = parsedHost.protocol;
+    CONFIG._basePath = parsedHost.pathname.replace(/\/+$/, ''); // e.g. "/jira02" or ""
   } catch (err) {
     console.error(`Не удалось прочитать ${configPath}: ${err.message}`);
     console.error('Скопируйте config.example.json в config.json и заполните данные.');
@@ -73,14 +84,28 @@ function proxyToJira(req, res, jiraPath, query) {
   });
 
   req.on('end', () => {
-    const jiraUrl = `https://${jiraHost}${jiraPath}${query || ''}`;
-    const jiraParsed = url.parse(jiraUrl);
+    // Use parsed config if available (real mode), otherwise use header values
+    let hostname, port, fullPath, useHttps;
+    if (CONFIG && CONFIG._hostname) {
+      hostname = CONFIG._hostname;
+      port = CONFIG._port;
+      fullPath = CONFIG._basePath + jiraPath + (query || '');
+      useHttps = CONFIG._protocol === 'https:';
+    } else {
+      const jiraUrl = `https://${jiraHost}${jiraPath}${query || ''}`;
+      const jiraParsed = url.parse(jiraUrl);
+      hostname = jiraParsed.hostname;
+      port = 443;
+      fullPath = jiraParsed.path;
+      useHttps = true;
+    }
 
     const options = {
-      hostname: jiraParsed.hostname,
-      port: 443,
-      path: jiraParsed.path,
+      hostname,
+      port,
+      path: fullPath,
       method: req.method,
+      rejectUnauthorized: false, // allow self-signed certificates
       headers: {
         'Authorization': authorization,
         'Content-Type': 'application/json',
@@ -88,7 +113,8 @@ function proxyToJira(req, res, jiraPath, query) {
       }
     };
 
-    const proxyReq = https.request(options, (proxyRes) => {
+    const httpModule = useHttps ? https : http;
+    const proxyReq = httpModule.request(options, (proxyRes) => {
       let responseData = '';
 
       proxyRes.on('data', chunk => {
