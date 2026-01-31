@@ -8,10 +8,17 @@
     "mock": "MODE=mock node server.js",
     "dev": "MODE=mock node --watch server.js"
   },
-  "keywords": ["jira", "task-management", "api"],
+  "keywords": [
+    "jira",
+    "task-management",
+    "api"
+  ],
   "author": "",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0"
   }
 }

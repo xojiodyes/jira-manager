@@ -111,6 +111,7 @@ const ISSUES = [
     id: '10012', key: 'PROJ-12',
     fields: {
       summary: 'Q1 2026 Release',
+      summary: 'Q1 2026 Release',
       description: 'Milestone для первого квартала 2026. Включает основные фичи авторизации и критические багфиксы.',
       status: STATUSES.inProgress,
       assignee: USERS.ivan,
@@ -120,6 +121,10 @@ const ISSUES = [
       labels: ['Milestone'],
       created: daysAgo(28),
       updated: daysAgo(1),
+      duedate: '2026-03-31',
+      customfield_18801: '2026-03-15',
+      customfield_10002: 3,
+      resolution: null,
       issuelinks: [inwardLink('PROJ-10'), outwardLink('PROJ-1'), outwardLink('PROJ-2'), outwardLink('PROJ-20')],
       comment: { comments: [], total: 0 }
     }
@@ -137,6 +142,10 @@ const ISSUES = [
       labels: ['milestone'],
       created: daysAgo(20),
       updated: daysAgo(3),
+      duedate: '2026-06-30',
+      customfield_18801: '2026-05-15',
+      customfield_10002: 2,
+      resolution: null,
       issuelinks: [inwardLink('PROJ-10'), outwardLink('PROJ-3'), outwardLink('PROJ-4')],
       comment: { comments: [], total: 0 }
     }
@@ -154,6 +163,10 @@ const ISSUES = [
       labels: ['Milestone'],
       created: daysAgo(15),
       updated: hoursAgo(2),
+      duedate: '2026-04-30',
+      customfield_18801: '2026-04-15',
+      customfield_10002: 4,
+      resolution: null,
       issuelinks: [inwardLink('PROJ-11'), outwardLink('DEMO-1'), outwardLink('DEMO-3')],
       comment: { comments: [], total: 0 }
     }

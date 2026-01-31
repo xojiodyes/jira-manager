@@ -143,6 +143,41 @@ class App {
     }
   }
 
+  async exportRoadmap() {
+    const btn = document.getElementById('exportRoadmapBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Exporting...';
+
+    try {
+      const jql = this.getSelectedJql() || this.serverConfig?.hierarchyJql || '';
+      const params = jql ? `?jql=${encodeURIComponent(jql)}` : '';
+      const res = await fetch(`/api/export/roadmap${params}`);
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Export failed');
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `roadmap-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      UI.toast('Roadmap exported successfully', 'success');
+    } catch (err) {
+      UI.toast(`Export error: ${err.message}`, 'error');
+      console.error('Export error:', err);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '📊 Export';
+    }
+  }
+
   async saveLocalField(issueKey, field, value) {
     try {
       const res = await fetch('/api/data', {
@@ -326,6 +361,11 @@ class App {
   }
 
   bindEvents() {
+    // Export roadmap button
+    document.getElementById('exportRoadmapBtn').addEventListener('click', () => {
+      this.exportRoadmap();
+    });
+
     // Snapshot button
     document.getElementById('snapshotBtn').addEventListener('click', () => {
       this.startSnapshot();

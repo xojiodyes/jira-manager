@@ -3,6 +3,7 @@ const https = require('https');
 const url = require('url');
 const fs = require('fs');
 const path = require('path');
+const ExcelJS = require('exceljs');
 
 const { handleMockRequest } = require('./mock-data');
 
@@ -163,7 +164,7 @@ function jiraFetch(apiPath, method = 'GET', body = null) {
 }
 
 async function jiraSearch(jql, maxResults = 200) {
-  const fields = 'summary,status,assignee,priority,issuetype,project,labels,issuelinks';
+  const fields = 'summary,status,assignee,priority,issuetype,project,labels,issuelinks,duedate,resolution,customfield_18801,customfield_10002';
   const params = new URLSearchParams({ jql, startAt: 0, maxResults, fields });
   return jiraFetch(`/rest/api/2/search?${params}`);
 }
@@ -751,6 +752,288 @@ async function computeSnapshot(baseJql) {
   }
 }
 
+// === ROADMAP EXCEL EXPORT ===
+
+// Theme accent colors (16 colors)
+const DB_ACCENTS = [
+  'FF4A90D9', 'FF7B68EE', 'FFFF6B6B', 'FF51CF66',
+  'FFFFD43B', 'FFFF922B', 'FF20C997', 'FFCC5DE8',
+  'FF339AF0', 'FF38D9A9', 'FFFF8787', 'FF748FFC',
+  'FFFF6348', 'FF2ED573', 'FFECCC68', 'FFA29BFE'
+];
+// Pastel variants for milestone cells
+const DB_ACCENTS_1 = [
+  'FFDBE9F8', 'FFE3DEFE', 'FFFFE0E0', 'FFDDF5E4',
+  'FFFFF3CD', 'FFFFF0E0', 'FFD5F5EC', 'FFF3E5FA',
+  'FFD9ECFF', 'FFD5F5EB', 'FFFFE0E0', 'FFE1E5FF',
+  'FFFFE4DE', 'FFD4F5E0', 'FFFFF8DD', 'FFE9E7FE'
+];
+
+function addMonths(d, n) {
+  const result = new Date(d);
+  result.setMonth(result.getMonth() + n);
+  return result;
+}
+
+function quarterStartFor(d) {
+  const q = Math.floor(d.getMonth() / 3);
+  return new Date(d.getFullYear(), q * 3, 1);
+}
+
+function nextQuarterStartOnOrAfter(d) {
+  const qs = quarterStartFor(d);
+  if (d.getTime() === qs.getTime()) return d;
+  return addMonths(qs, 3);
+}
+
+function formatMonthLabel(d) {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function formatQuarterLabel(d) {
+  const q = Math.floor(d.getMonth() / 3) + 1;
+  return `Q${q} ${d.getFullYear()}`;
+}
+
+function buildTimeBuckets() {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), 1); // start of current month
+  const buckets = [];
+
+  // 3 months
+  for (let i = 0; i < 3; i++) {
+    const start = addMonths(today, i);
+    const end = addMonths(start, 1);
+    end.setDate(end.getDate() - 1);
+    buckets.push({ label: formatMonthLabel(start), start, end, type: 'month' });
+  }
+
+  // 3 quarters (starting from the quarter after the last month)
+  let qStart = nextQuarterStartOnOrAfter(addMonths(today, 3));
+  for (let i = 0; i < 3; i++) {
+    const qEnd = addMonths(qStart, 3);
+    qEnd.setDate(qEnd.getDate() - 1);
+    buckets.push({ label: formatQuarterLabel(qStart), start: qStart, end: qEnd, type: 'quarter' });
+    qStart = addMonths(qStart, 3);
+  }
+
+  // Next year catch-all
+  const nextYearStart = new Date(qStart); // after last quarter
+  buckets.push({ label: `${nextYearStart.getFullYear()}+`, start: nextYearStart, end: new Date(2099, 11, 31), type: 'year' });
+
+  return buckets;
+}
+
+function findBucketIndex(targetDate, buckets) {
+  if (!targetDate) return -1;
+  const d = new Date(targetDate);
+  for (let i = 0; i < buckets.length; i++) {
+    if (d >= buckets[i].start && d <= buckets[i].end) return i;
+  }
+  // If before first bucket, return -1 (skip)
+  if (d < buckets[0].start) return -1;
+  // If after last bucket, put in last bucket
+  return buckets.length - 1;
+}
+
+function applyOuterBorder(ws, startRow, startCol, endRow, endCol) {
+  const thin = { style: 'thin', color: { argb: 'FF999999' } };
+  for (let r = startRow; r <= endRow; r++) {
+    for (let c = startCol; c <= endCol; c++) {
+      const cell = ws.getCell(r, c);
+      const border = {};
+      if (r === startRow) border.top = thin;
+      if (r === endRow) border.bottom = thin;
+      if (c === startCol) border.left = thin;
+      if (c === endCol) border.right = thin;
+      cell.border = { ...cell.border, ...border };
+    }
+  }
+}
+
+async function generateRoadmapExcel(baseJql) {
+  const buckets = buildTimeBuckets();
+
+  // Column layout: A=empty(1), B=Theme(2), C=Resources(3), D..=buckets
+  const THEME_COL = 2;
+  const RESOURCES_COL = 3;
+  const FIRST_BUCKET_COL = 4;
+
+  // Fetch themes
+  const themesJql = baseJql
+    ? `labels = theme AND ${baseJql}`
+    : 'labels = theme';
+  const themesData = await jiraSearch(themesJql);
+  const themes = themesData.issues || [];
+
+  // For each theme, fetch milestones
+  const themeDataList = [];
+  for (const theme of themes) {
+    const themeIssue = await jiraGetIssue(theme.key);
+    const links = themeIssue.fields?.issuelinks || [];
+    const EXCLUDED = ['cloners', 'duplicate'];
+    const linkedKeys = [];
+    for (const link of links) {
+      const typeName = (link.type?.name || '').toLowerCase();
+      if (EXCLUDED.some(ex => typeName.includes(ex))) continue;
+      if (link.outwardIssue) linkedKeys.push(link.outwardIssue.key);
+      if (link.inwardIssue) linkedKeys.push(link.inwardIssue.key);
+    }
+
+    let milestones = [];
+    if (linkedKeys.length > 0) {
+      const msJql = `key in (${linkedKeys.join(',')}) AND labels = milestone ORDER BY updated DESC`;
+      const msData = await jiraSearch(msJql);
+      milestones = msData.issues || [];
+    }
+
+    // For each milestone, compute target date
+    const msWithDates = milestones.map(ms => {
+      const f = ms.fields;
+      // Priority: EstimatedDate → DueDate → fallback 2027-06-30
+      const estimatedDate = f.customfield_18801 || null;
+      const dueDate = f.duedate || null;
+      const targetDate = estimatedDate || dueDate || '2027-06-30';
+      const resources = f.customfield_10002 || '';
+      const isResolved = f.resolution !== null && f.resolution !== undefined;
+      return {
+        key: ms.key,
+        summary: f.summary || ms.key,
+        targetDate,
+        resources: resources ? String(resources) : '',
+        isResolved,
+        status: f.status?.name || ''
+      };
+    });
+
+    themeDataList.push({
+      key: theme.key,
+      summary: theme.fields.summary || theme.key,
+      milestones: msWithDates
+    });
+  }
+
+  // Sort themes by summary
+  themeDataList.sort((a, b) => a.summary.localeCompare(b.summary));
+
+  // Create workbook
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Projects');
+  ws.views = [{ state: 'frozen', xSplit: RESOURCES_COL, ySplit: 1 }];
+
+  // Column widths
+  ws.getColumn(1).width = 3;    // spacer
+  ws.getColumn(THEME_COL).width = 40;
+  ws.getColumn(RESOURCES_COL).width = 10;
+  for (let i = 0; i < buckets.length; i++) {
+    ws.getColumn(FIRST_BUCKET_COL + i).width = 40;
+  }
+
+  // Header row
+  const headerRow = ws.getRow(1);
+  const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
+  const headerFont = { bold: true, size: 11 };
+
+  ws.getCell(1, THEME_COL).value = 'Theme';
+  ws.getCell(1, THEME_COL).fill = headerFill;
+  ws.getCell(1, THEME_COL).font = headerFont;
+
+  ws.getCell(1, RESOURCES_COL).value = 'Res';
+  ws.getCell(1, RESOURCES_COL).fill = headerFill;
+  ws.getCell(1, RESOURCES_COL).font = headerFont;
+
+  for (let i = 0; i < buckets.length; i++) {
+    const cell = ws.getCell(1, FIRST_BUCKET_COL + i);
+    cell.value = buckets[i].label;
+    cell.fill = headerFill;
+    cell.font = headerFont;
+    cell.alignment = { horizontal: 'center' };
+  }
+
+  // Write themes and milestones
+  let currentRow = 2;
+  const totalCols = FIRST_BUCKET_COL + buckets.length - 1;
+
+  for (let ti = 0; ti < themeDataList.length; ti++) {
+    const theme = themeDataList[ti];
+    const colorIdx = ti % DB_ACCENTS.length;
+    const themeColor = DB_ACCENTS[colorIdx];
+    const milestoneColor = DB_ACCENTS_1[colorIdx];
+    const themeFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: themeColor } };
+    const msFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: milestoneColor } };
+
+    const themeStartRow = currentRow;
+    const msCount = Math.max(theme.milestones.length, 1);
+
+    // Aggregate resources for theme
+    const totalResources = theme.milestones.reduce((sum, ms) => {
+      const r = parseInt(ms.resources, 10);
+      return sum + (isNaN(r) ? 0 : r);
+    }, 0);
+
+    for (let mi = 0; mi < msCount; mi++) {
+      const row = currentRow + mi;
+
+      // Theme name cell (only on first row, will be merged later)
+      if (mi === 0) {
+        const themeCell = ws.getCell(row, THEME_COL);
+        themeCell.value = theme.summary;
+        themeCell.fill = themeFill;
+        themeCell.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+        themeCell.alignment = { vertical: 'middle', wrapText: true };
+
+        const resCell = ws.getCell(row, RESOURCES_COL);
+        resCell.value = totalResources || '';
+        resCell.fill = themeFill;
+        resCell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        resCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      }
+
+      if (mi < theme.milestones.length) {
+        const ms = theme.milestones[mi];
+        const bucketIdx = findBucketIndex(ms.targetDate, buckets);
+        if (bucketIdx >= 0) {
+          const col = FIRST_BUCKET_COL + bucketIdx;
+          const cell = ws.getCell(row, col);
+          cell.value = ms.summary;
+          cell.fill = msFill;
+          cell.alignment = { wrapText: true };
+
+          if (ms.isResolved) {
+            cell.font = { strike: true, color: { argb: 'FF666666' } };
+          }
+        }
+      }
+    }
+
+    // Merge theme cells if multiple rows
+    if (msCount > 1) {
+      ws.mergeCells(themeStartRow, THEME_COL, themeStartRow + msCount - 1, THEME_COL);
+      ws.mergeCells(themeStartRow, RESOURCES_COL, themeStartRow + msCount - 1, RESOURCES_COL);
+    }
+
+    // Fill empty cells in theme block with theme color (for theme/resources cols)
+    for (let mi = 1; mi < msCount; mi++) {
+      // These are merged, but we still set fill on the first cell
+    }
+
+    // Apply outer border for this theme block
+    applyOuterBorder(ws, themeStartRow, THEME_COL, themeStartRow + msCount - 1, totalCols);
+
+    currentRow += msCount;
+  }
+
+  // Apply outer border for the whole table
+  if (themeDataList.length > 0) {
+    applyOuterBorder(ws, 1, THEME_COL, currentRow - 1, totalCols);
+  }
+
+  // Generate buffer
+  const buffer = await wb.xlsx.writeBuffer();
+  return buffer;
+}
+
 // MIME types for static files
 const MIME_TYPES = {
   '.html': 'text/html',
@@ -982,6 +1265,27 @@ const server = http.createServer((req, res) => {
   if (pathname === '/api/progress/history' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ snapshots: PROGRESS_DATA.snapshots, gitActivity: PROGRESS_DATA.gitActivity || {}, developers: PROGRESS_DATA.developers || {}, lastRun: PROGRESS_DATA.lastRun }));
+    return;
+  }
+
+  // Export roadmap as Excel
+  if (pathname === '/api/export/roadmap' && req.method === 'GET') {
+    const jql = parsedUrl.query?.jql || '';
+    generateRoadmapExcel(jql)
+      .then(buffer => {
+        const filename = `roadmap-${new Date().toISOString().slice(0, 10)}.xlsx`;
+        res.writeHead(200, {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Content-Length': buffer.length
+        });
+        res.end(Buffer.from(buffer));
+      })
+      .catch(err => {
+        console.error('Roadmap export error:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      });
     return;
   }
 

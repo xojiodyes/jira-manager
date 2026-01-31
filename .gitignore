@@ -1,1 +1,4 @@
 /.claude
+node_modules/
+progress-history.json
+data.json
