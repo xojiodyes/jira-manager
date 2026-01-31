@@ -154,6 +154,35 @@ const UI = {
    * @param {number} height
    * @returns {string} HTML string
    */
+  _buildWeeklyTooltip(dataPoints) {
+    if (!dataPoints || dataPoints.length === 0) return '';
+    // Group by ISO week (Mon-Sun)
+    const weeks = {};
+    for (const dp of dataPoints) {
+      const d = new Date(dp.date + 'T00:00:00');
+      // Get Monday of this week
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(d);
+      monday.setDate(diff);
+      const weekKey = monday.toISOString().slice(0, 10);
+      if (!weeks[weekKey]) weeks[weekKey] = [];
+      weeks[weekKey].push(dp.progress);
+    }
+    // Build tooltip lines
+    const lines = [];
+    const weekKeys = Object.keys(weeks).sort();
+    for (const wk of weekKeys) {
+      const vals = weeks[wk];
+      const avg = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+      // Format: "03 Dec: 45%"
+      const d = new Date(wk + 'T00:00:00');
+      const label = d.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+      lines.push(`${label}: ${avg}%`);
+    }
+    return lines.join('\n');
+  },
+
   renderSparkline(dataPoints, width = 80, height = 20) {
     if (!dataPoints || dataPoints.length === 0) {
       return '<span class="sparkline-empty">--</span>';
@@ -170,7 +199,9 @@ const UI = {
     if (dataPoints.length === 1) {
       const cx = width / 2;
       const cy = pad + h - (dataPoints[0].progress / maxY) * h;
+      const tip1 = this._buildWeeklyTooltip(dataPoints);
       return `<svg class="sparkline" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+        <title>${tip1}</title>
         <circle cx="${cx}" cy="${cy}" r="3" fill="${color}"/>
       </svg>`;
     }
@@ -189,7 +220,9 @@ const UI = {
     ].join(' ');
 
     const last = points[points.length - 1];
-    const tooltip = `${lastProgress}% (${dataPoints[dataPoints.length - 1].date})`;
+
+    // Build weekly tooltip
+    const tooltip = this._buildWeeklyTooltip(dataPoints);
 
     return `<svg class="sparkline" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
       <title>${tooltip}</title>
