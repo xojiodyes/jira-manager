@@ -510,6 +510,42 @@ function filterByJql(jql) {
 // Track next ID for creating issues
 let nextId = 20000;
 
+// Generate mock changelog with status transitions for testing sparklines
+function generateMockChangelog(issue) {
+  const statusName = issue.fields.status?.name || 'To Do';
+  const statusFlow = ['To Do', 'In Progress', 'In Review', 'Done'];
+  const currentIdx = statusFlow.indexOf(statusName);
+  if (currentIdx <= 0) {
+    // No transitions — stayed in To Do
+    return { histories: [], maxResults: 0, total: 0, startAt: 0 };
+  }
+
+  // Generate transitions spread over the last 60 days
+  const histories = [];
+  const now = new Date();
+  const daysBack = 55; // start transitions ~55 days ago
+  const stepDays = Math.floor(daysBack / currentIdx);
+
+  for (let i = 0; i < currentIdx; i++) {
+    const transDate = new Date(now);
+    transDate.setDate(transDate.getDate() - (daysBack - i * stepDays));
+    histories.push({
+      id: String(10000 + Math.random() * 10000 | 0),
+      created: transDate.toISOString(),
+      items: [{
+        field: 'status',
+        fieldtype: 'jira',
+        from: String(i),
+        fromString: statusFlow[i],
+        to: String(i + 1),
+        toString: statusFlow[i + 1]
+      }]
+    });
+  }
+
+  return { histories, maxResults: histories.length, total: histories.length, startAt: 0 };
+}
+
 // Handle mock API requests
 function handleMockRequest(jiraPath, query, method, reqBody) {
   method = (method || 'GET').toUpperCase();
@@ -620,8 +656,15 @@ function handleMockRequest(jiraPath, query, method, reqBody) {
   const issueMatch = jiraPath.match(/^\/rest\/api\/2\/issue\/([A-Z]+-\d+)$/);
   if (issueMatch) {
     const issue = ISSUES.find(i => i.key === issueMatch[1]);
-    if (issue) return { status: 200, body: issue };
-    return { status: 404, body: { errorMessages: ['Issue not found'] } };
+    if (!issue) return { status: 404, body: { errorMessages: ['Issue not found'] } };
+
+    // If expand=changelog requested, generate mock changelog
+    if (query && query.includes('expand=changelog')) {
+      const body = JSON.parse(JSON.stringify(issue));
+      body.changelog = generateMockChangelog(issue);
+      return { status: 200, body };
+    }
+    return { status: 200, body: issue };
   }
 
   // /rest/api/2/issue/:key/comment

@@ -24,6 +24,9 @@ class App {
     this.activePanel = 'themes';
     this.highlightedIndex = { themes: 0, milestones: -1, tasks: -1, epicTasks: -1 };
 
+    // Progress history for sparklines
+    this.progressHistory = {}; // { "KEY": [{ date, progress }, ...] }
+
     this.init();
   }
 
@@ -34,6 +37,7 @@ class App {
 
     // Load local data (status/confidence)
     await this.loadLocalData();
+    await this.loadProgressHistory();
 
     this.loadJqlFilters();
     this.bindEvents();
@@ -48,6 +52,86 @@ class App {
     } catch (err) {
       console.error('Failed to load local data:', err);
       this.localData = {};
+    }
+  }
+
+  async loadProgressHistory() {
+    try {
+      const res = await fetch('/api/progress/history');
+      const data = await res.json();
+      this.progressHistory = this._transformSnapshots(data.snapshots || {});
+    } catch (err) {
+      console.error('Failed to load progress history:', err);
+      this.progressHistory = {};
+    }
+  }
+
+  _transformSnapshots(snapshots) {
+    const result = {};
+    const dates = Object.keys(snapshots).sort();
+    // Keep last 60 days
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 60);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    for (const date of dates) {
+      if (date < cutoffStr) continue;
+      const issues = snapshots[date];
+      for (const [key, val] of Object.entries(issues)) {
+        if (!result[key]) result[key] = [];
+        result[key].push({ date, progress: val.progress });
+      }
+    }
+    return result;
+  }
+
+  async startSnapshot() {
+    const jql = this.getSelectedJql();
+    const btn = document.getElementById('snapshotBtn');
+    const statusEl = document.getElementById('snapshotStatus');
+    btn.disabled = true;
+    statusEl.textContent = 'Starting...';
+
+    try {
+      const res = await fetch('/api/progress/snapshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jql })
+      });
+      const result = await res.json();
+      if (!result.ok) {
+        statusEl.textContent = result.error || 'Error';
+        btn.disabled = false;
+        return;
+      }
+
+      // Listen for SSE progress
+      const es = new EventSource('/api/progress/snapshot/status');
+      es.onmessage = async (event) => {
+        const state = JSON.parse(event.data);
+        statusEl.textContent = state.message || '';
+        if (state.phase === 'done') {
+          es.close();
+          btn.disabled = false;
+          statusEl.textContent = '';
+          UI.toast(`Snapshot complete: ${state.totalIssues} issues`, 'info');
+          await this.loadProgressHistory();
+          this.loadThemes();
+        } else if (state.phase === 'error') {
+          es.close();
+          btn.disabled = false;
+          statusEl.textContent = 'Error: ' + (state.error || '');
+        }
+      };
+      es.onerror = () => {
+        es.close();
+        btn.disabled = false;
+        statusEl.textContent = '';
+      };
+    } catch (err) {
+      btn.disabled = false;
+      statusEl.textContent = 'Error';
+      console.error('Snapshot error:', err);
     }
   }
 
@@ -234,6 +318,11 @@ class App {
   }
 
   bindEvents() {
+    // Snapshot button
+    document.getElementById('snapshotBtn').addEventListener('click', () => {
+      this.startSnapshot();
+    });
+
     // JQL selector
     document.getElementById('jqlDropdown').addEventListener('change', (e) => {
       this.onJqlSelect(parseInt(e.target.value, 10));
@@ -672,6 +761,7 @@ class App {
         <span class="hlh-field">Status</span>
         <span class="hlh-field">Confid.</span>
         <span class="hlh-count">Items</span>
+        <span class="hlh-sparkline">Trend</span>
         <span class="hlh-link"></span>
       </div>`;
     for (const issue of issues) {
@@ -696,6 +786,7 @@ class App {
             <span class="editable-field editable-status" data-key="${issue.key}" data-field="status" title="Status (0-100)">${status !== null ? status + '%' : '—'}</span>
             <span class="editable-field editable-confidence" data-key="${issue.key}" data-field="confidence" title="Confidence (0-100)">${confidence !== null ? confidence + '%' : '—'}</span>
             <span class="hierarchy-items-count" title="Child items">${childCount}</span>
+            <span class="hierarchy-sparkline">${UI.renderSparkline(this.progressHistory[issue.key] || [])}</span>
             <a href="${jiraAPI.getIssueUrl(issue.key)}" target="_blank" class="hierarchy-jira-link" title="Open in Jira" onclick="event.stopPropagation()">↗</a>
           </div>
         </div>
@@ -928,7 +1019,9 @@ class App {
       const jql = `key in (${linkedKeys.join(',')}) AND (labels is EMPTY OR (labels != theme AND labels != milestone)) ORDER BY updated DESC`;
       const data = await jiraAPI.searchIssues(jql, 0, 200);
       container.classList.remove('loading-overlay');
+
       countEl.textContent = data.total > 0 ? data.total : '';
+
       this.renderHierarchyTasks(container, data.issues, 'epicSubTasks');
 
       // Keyboard: highlight first epic task
@@ -972,6 +1065,7 @@ class App {
     const showJiraStatus = context !== 'epicTasks' && context !== 'epicSubTasks';
     const showPriority = context !== 'epicTasks' && context !== 'epicSubTasks';
     const showLocalFields = context !== 'epicSubTasks';
+    const showProgress = context === 'epicSubTasks';
     const compactType = context === 'epicTasks' || context === 'epicSubTasks';
 
     let colgroup = '<colgroup>';
@@ -982,6 +1076,10 @@ class App {
     if (showLocalFields) colgroup += '<col style="width: 80px;">';   // Status %
     if (showLocalFields) colgroup += '<col style="width: 80px;">';   // Confid. %
     if (showPriority) colgroup += '<col style="width: 100px;">';   // Priority
+    const showItemsCount = context === 'epicTasks';
+    if (showItemsCount) colgroup += '<col style="width: 50px;">';  // Items
+    if (showProgress) colgroup += '<col style="width: 80px;">';   // Progress
+    colgroup += '<col style="width: 84px;">';   // Trend
     colgroup += '<col style="width: 140px;">';  // Assignee
     colgroup += '<col style="width: 36px;">';   // Link
     colgroup += '</colgroup>';
@@ -991,7 +1089,9 @@ class App {
     if (showJiraStatus) thead += '<th>Jira Status</th>';
     if (showLocalFields) thead += '<th>Status %</th><th>Confid. %</th>';
     if (showPriority) thead += '<th>Priority</th>';
-    thead += '<th>Assignee</th><th></th></tr>';
+    if (showItemsCount) thead += '<th>Items</th>';
+    if (showProgress) thead += '<th>Progress</th>';
+    thead += '<th>Trend</th><th>Assignee</th><th></th></tr>';
 
     let html = `
       <table class="issues-table issues-table-fixed">
@@ -1005,7 +1105,15 @@ class App {
       const statusClass = UI.getStatusClass(f.status?.statusCategory?.key);
       const localStatus = this.getLocalField(issue.key, 'status');
       const localConfidence = this.getLocalField(issue.key, 'confidence');
-      const isEpic = f.issuetype?.name === 'Epic';
+
+      const EXCLUDED_LINK_TYPES = ['cloners', 'duplicate'];
+      const childCount = (f.issuelinks || []).filter(link => {
+        if (!link.outwardIssue) return false;
+        const typeName = (link.type?.name || '').toLowerCase();
+        if (EXCLUDED_LINK_TYPES.some(ex => typeName.includes(ex))) return false;
+        return true;
+      }).length;
+      const isEpic = f.issuetype?.name === 'Epic' || (showItemsCount && childCount > 0);
 
       html += `
         <tr class="${isEpic ? 'epic-row' : ''}" data-key="${issue.key}">
@@ -1043,6 +1151,17 @@ class App {
       if (showPriority) {
         html += `<td>${UI.escapeHtml(f.priority?.name || '-')}</td>`;
       }
+
+      if (showItemsCount) {
+        html += `<td class="items-count-cell">${childCount || ''}</td>`;
+      }
+
+      if (showProgress) {
+        const pct = App.statusToProgress(f.status?.name);
+        html += `<td class="progress-cell"><span class="progress-badge progress-${pct}">${pct}%</span></td>`;
+      }
+
+      html += `<td class="sparkline-cell">${UI.renderSparkline(this.progressHistory[issue.key] || [])}</td>`;
 
       html += `
           <td>
@@ -1090,6 +1209,28 @@ class App {
   // === KEYBOARD NAVIGATION ===
 
   static PANELS = ['themes', 'milestones', 'tasks', 'epicTasks'];
+
+  static STATUS_PROGRESS_MAP = {
+    'open': 0, 'to do': 0, 'backlog': 0, 'new': 0, 'reopened': 0,
+    'in development': 20, 'in progress': 20, 'dev': 20, 'in review': 20, 'review': 20, 'code review': 20,
+    'qa': 40, 'in qa': 40, 'in testing': 40, 'testing': 40, 'ready for qa': 40,
+    'uat': 60, 'in uat': 60, 'user acceptance': 60, 'ready for uat': 60,
+    'uat done': 80, 'ready for prod': 80, 'ready for release': 80, 'ready for deploy': 80,
+    'resolved': 100, 'closed': 100, 'done': 100, 'released': 100
+  };
+
+  static statusToProgress(statusName) {
+    if (!statusName) return 0;
+    const name = statusName.toLowerCase().trim();
+    if (App.STATUS_PROGRESS_MAP.hasOwnProperty(name)) {
+      return App.STATUS_PROGRESS_MAP[name];
+    }
+    // Fallback: partial match
+    for (const [key, val] of Object.entries(App.STATUS_PROGRESS_MAP)) {
+      if (name.includes(key) || key.includes(name)) return val;
+    }
+    return 0;
+  }
   static PANEL_CONFIG = {
     themes:     { containerId: 'themesContainer',         rowSelector: '.hierarchy-row' },
     milestones: { containerId: 'milestonesContainer',     rowSelector: '.hierarchy-row' },

@@ -145,6 +145,58 @@ const UI = {
         <p>${this.escapeHtml(message)}</p>
       </div>
     `;
+  },
+
+  /**
+   * Render inline SVG sparkline
+   * @param {Array<{date: string, progress: number}>} dataPoints
+   * @param {number} width
+   * @param {number} height
+   * @returns {string} HTML string
+   */
+  renderSparkline(dataPoints, width = 80, height = 20) {
+    if (!dataPoints || dataPoints.length === 0) {
+      return '<span class="sparkline-empty">--</span>';
+    }
+
+    const pad = 2;
+    const w = width - pad * 2;
+    const h = height - pad * 2;
+    const maxY = 100;
+
+    const lastProgress = dataPoints[dataPoints.length - 1].progress;
+    const color = lastProgress >= 80 ? '#36b37e' : lastProgress >= 40 ? '#0052cc' : '#ff5630';
+
+    if (dataPoints.length === 1) {
+      const cx = width / 2;
+      const cy = pad + h - (dataPoints[0].progress / maxY) * h;
+      return `<svg class="sparkline" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+        <circle cx="${cx}" cy="${cy}" r="3" fill="${color}"/>
+      </svg>`;
+    }
+
+    const points = dataPoints.map((d, i) => {
+      const x = pad + (i / (dataPoints.length - 1)) * w;
+      const y = pad + h - (d.progress / maxY) * h;
+      return { x, y };
+    });
+
+    const polyline = points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const areaPoints = [
+      `${pad},${height - pad}`,
+      ...points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`),
+      `${(width - pad).toFixed(1)},${height - pad}`
+    ].join(' ');
+
+    const last = points[points.length - 1];
+    const tooltip = `${lastProgress}% (${dataPoints[dataPoints.length - 1].date})`;
+
+    return `<svg class="sparkline" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <title>${tooltip}</title>
+      <polygon points="${areaPoints}" fill="${color}" opacity="0.1"/>
+      <polyline points="${polyline}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="2" fill="${color}"/>
+    </svg>`;
   }
 };
 
