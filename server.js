@@ -345,16 +345,18 @@ function aggregateGitActivity(childGitData) {
 
 // Map Jira status to role
 function statusToRole(statusName) {
-  if (!statusName) return null;
+  if (!statusName) return 'BA';
   const s = statusName.toLowerCase();
   if (s === 'in progress' || s === 'in development' || s === 'development') return 'Dev';
   if (s === 'code review' || s === 'in review' || s === 'review') return 'Dev';
   if (s === 'qa' || s === 'in qa' || s === 'testing' || s === 'in testing' || s === 'test') return 'QA';
-  return null;
+  if (s === 'done' || s === 'closed' || s === 'resolved') return null; // skip Done phase
+  // Everything before dev phase: To Do, Open, Backlog, New, Analysis, etc.
+  return 'BA';
 }
 
 // Extract developers with roles from changelog (last 30 days)
-// Returns { Dev: [{ displayName, avatarUrl }], QA: [...] }
+// Returns { BA: [...], Dev: [{ displayName, avatarUrl }], QA: [...] }
 function extractDevelopers(issue) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 30);

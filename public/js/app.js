@@ -592,8 +592,8 @@ class App {
         const roles = Object.keys(devsByRole);
         if (roles.length === 0) return '';
         const totalDevs = new Set(roles.flatMap(r => devsByRole[r].map(d => d.displayName))).size;
-        const roleLabels = { Dev: 'Development', QA: 'QA / Testing' };
-        const roleOrder = ['Dev', 'QA'];
+        const roleLabels = { BA: 'Author / BA', Dev: 'Development', QA: 'QA / Testing' };
+        const roleOrder = ['BA', 'Dev', 'QA'];
         return `
           <div class="issue-detail-section">
             <h4>Team — last 30 days (${totalDevs})</h4>
