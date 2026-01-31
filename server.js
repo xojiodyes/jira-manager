@@ -637,8 +637,8 @@ async function computeSnapshot(baseJql) {
               milestoneGitData.push(msGit);
             }
           }
-          // Aggregate developers for milestone
-          const msEpicDevLists = epics.map(e => devResults[e.key]).filter(Boolean);
+          // Aggregate developers for milestone (from all epic keys that have devResults)
+          const msEpicDevLists = epicLinkedKeys.map(k => devResults[k]).filter(Boolean);
           if (msEpicDevLists.length > 0) {
             devResults[milestone.key] = aggregateDevelopers(msEpicDevLists);
           }
