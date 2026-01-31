@@ -199,32 +199,64 @@ function extractOutwardKeys(issue) {
 }
 
 // Fetch git dev-status for an issue (Jira Data Center)
-// Tries multiple API versions and application types
+// Tries summary first, then detail APIs
 async function fetchDevStatus(issueId) {
-  // Strategy 1: /rest/dev-status/latest/issue/detail (newer Jira versions)
-  const latestApis = [
+  console.log(`[DevStatus] Fetching dev-status for issueId=${issueId}`);
+
+  // Step 1: Try summary API first (this is what Jira UI uses)
+  const summaryApis = [
+    `/rest/dev-status/1.0/issue/summary?issueId=${issueId}`,
+    `/rest/dev-status/latest/issue/summary?issueId=${issueId}`,
+  ];
+
+  for (const summaryApi of summaryApis) {
+    try {
+      console.log(`[DevStatus]   trying summary: ${summaryApi}`);
+      const summary = await jiraFetch(summaryApi);
+      console.log(`[DevStatus]   summary response: ${JSON.stringify(summary).substring(0, 800)}`);
+
+      // Check if summary reports any commits
+      const commitInfo = summary?.summary?.commit || summary?.summary?.repository?.commit;
+      const commitCount = commitInfo?.count || commitInfo?.overall?.count || 0;
+      console.log(`[DevStatus]   summary commit count: ${commitCount}`);
+
+      if (commitCount > 0) {
+        console.log(`[DevStatus]   ✓ Summary confirms commits exist, trying detail API...`);
+        // Now try detail to get actual commit data
+        const detailResult = await fetchDevStatusDetail(issueId);
+        if (detailResult) return detailResult;
+        console.log(`[DevStatus]   ⚠ Summary says ${commitCount} commits but detail API returned nothing (likely auth issue with Bitbucket App Link)`);
+      }
+      break; // Summary worked, no need to try next version
+    } catch (e) {
+      console.log(`[DevStatus]   summary error: ${e.message.substring(0, 200)}`);
+    }
+  }
+
+  // Step 2: If summary didn't work, try detail directly
+  const detailResult = await fetchDevStatusDetail(issueId);
+  if (detailResult) return detailResult;
+
+  console.log(`[DevStatus]   ✗ No commits found for issueId=${issueId}`);
+  return null;
+}
+
+// Try all detail API variants
+async function fetchDevStatusDetail(issueId) {
+  const detailApis = [
+    `/rest/dev-status/1.0/issue/detail?issueId=${issueId}&applicationType=stash&dataType=repository`,
+    `/rest/dev-status/1.0/issue/detail?issueId=${issueId}&applicationType=bitbucket&dataType=repository`,
+    `/rest/dev-status/1.0/issue/detail?issueId=${issueId}&applicationType=github&dataType=repository`,
     `/rest/dev-status/latest/issue/detail?issueId=${issueId}&applicationType=stash&dataType=repository`,
     `/rest/dev-status/latest/issue/detail?issueId=${issueId}&applicationType=bitbucket&dataType=repository`,
     `/rest/dev-status/latest/issue/detail?issueId=${issueId}&applicationType=github&dataType=repository`,
   ];
 
-  // Strategy 2: /rest/dev-status/1.0/issue/detail (older)
-  const v1Apis = [
-    `/rest/dev-status/1.0/issue/detail?issueId=${issueId}&applicationType=stash&dataType=repository`,
-    `/rest/dev-status/1.0/issue/detail?issueId=${issueId}&applicationType=bitbucket&dataType=repository`,
-    `/rest/dev-status/1.0/issue/detail?issueId=${issueId}&applicationType=github&dataType=repository`,
-  ];
-
-  // Strategy 3: /rest/dev-status/latest/issue/summary (sometimes has commit count)
-  const summaryApi = `/rest/dev-status/latest/issue/summary?issueId=${issueId}`;
-
-  const allApis = [...latestApis, ...v1Apis];
-
-  console.log(`[DevStatus] Fetching dev-status for issueId=${issueId}`);
-
-  for (const apiPath of allApis) {
+  for (const apiPath of detailApis) {
+    const appType = apiPath.match(/applicationType=(\w+)/)?.[1];
+    const version = apiPath.includes('latest') ? 'latest' : '1.0';
     try {
-      console.log(`[DevStatus]   trying: ${apiPath.replace(/.*\/rest/, '/rest').split('?')[0]}?...applicationType=${apiPath.match(/applicationType=(\w+)/)?.[1]}`);
+      console.log(`[DevStatus]   detail ${version}/${appType}`);
       const data = await jiraFetch(apiPath);
 
       if (!data?.detail || data.detail.length === 0) {
@@ -237,16 +269,16 @@ async function fetchDevStatus(issueId) {
         const instanceType = entry.instance?.type || entry._instance?.typeName || 'unknown';
 
         if (entry.error) {
-          console.log(`[DevStatus]     → instance="${instanceName}" (${instanceType}): ERROR "${entry.error}"`);
+          console.log(`[DevStatus]     → "${instanceName}" (${instanceType}): ERROR "${entry.error}"`);
           continue;
         }
 
         const repos = entry.repositories || [];
         const commitCount = repos.reduce((s, r) => s + (r.commits || []).length, 0);
-        console.log(`[DevStatus]     → instance="${instanceName}" (${instanceType}): ${repos.length} repos, ${commitCount} commits`);
+        console.log(`[DevStatus]     → "${instanceName}": ${repos.length} repos, ${commitCount} commits`);
 
         if (commitCount > 0) {
-          console.log(`[DevStatus]   ✓ Found commits via ${apiPath.includes('latest') ? 'latest' : '1.0'} API!`);
+          console.log(`[DevStatus]   ✓ Found commits via detail ${version}/${appType}!`);
           return data;
         }
       }
@@ -254,17 +286,6 @@ async function fetchDevStatus(issueId) {
       console.log(`[DevStatus]     → error: ${e.message.substring(0, 150)}`);
     }
   }
-
-  // Strategy 3: try summary API to see if Jira knows about any dev info at all
-  try {
-    console.log(`[DevStatus]   trying summary API...`);
-    const summary = await jiraFetch(summaryApi);
-    console.log(`[DevStatus]   summary response: ${JSON.stringify(summary).substring(0, 500)}`);
-  } catch (e) {
-    console.log(`[DevStatus]   summary error: ${e.message.substring(0, 150)}`);
-  }
-
-  console.log(`[DevStatus]   ✗ No commits found for issueId=${issueId}`);
   return null;
 }
 
