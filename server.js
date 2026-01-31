@@ -199,7 +199,7 @@ function extractOutwardKeys(issue) {
 }
 
 // Fetch git dev-status for an issue (Jira Data Center)
-// Tries summary first, then detail APIs
+// Returns structured object: { lastActivity, prCount, prMerged, prOpen, repoCount, commitCount }
 async function fetchDevStatus(issueId) {
   console.log(`[DevStatus] Fetching dev-status for issueId=${issueId}`);
 
@@ -215,7 +215,6 @@ async function fetchDevStatus(issueId) {
       const summary = await jiraFetch(summaryApi);
       console.log(`[DevStatus]   summary response: ${JSON.stringify(summary).substring(0, 800)}`);
 
-      // Check if summary reports any PR, commit or repository activity
       const prInfo = summary?.summary?.pullrequest;
       const commitInfo = summary?.summary?.commit;
       const repoInfo = summary?.summary?.repository;
@@ -226,26 +225,29 @@ async function fetchDevStatus(issueId) {
       console.log(`[DevStatus]   summary: ${commitCount} commits, ${prCount} PRs, ${repoCount} repos`);
 
       if (totalActivity > 0) {
-        console.log(`[DevStatus]   ✓ Summary confirms activity, trying detail API...`);
-        // Now try detail to get actual commit data with dates
-        const detailResult = await fetchDevStatusDetail(issueId);
-        if (detailResult) return detailResult;
+        // Extract PR details
+        const prDetails = prInfo?.overall?.details || {};
+        const prMerged = prDetails.mergedCount || 0;
+        const prOpen = prDetails.openCount || 0;
 
-        // Detail failed (likely auth) — fallback: use lastUpdated from summary as activity dates
-        console.log(`[DevStatus]   ⚠ Detail API failed, using summary lastUpdated as fallback`);
-        const activityDates = new Set();
-        const prLastUpdated = prInfo?.overall?.lastUpdated || prInfo?.lastUpdated;
-        const commitLastUpdated = commitInfo?.overall?.lastUpdated || commitInfo?.lastUpdated;
-        const repoLastUpdated = repoInfo?.overall?.lastUpdated || repoInfo?.lastUpdated;
-        if (prLastUpdated) activityDates.add(new Date(prLastUpdated).toISOString().slice(0, 10));
-        if (commitLastUpdated) activityDates.add(new Date(commitLastUpdated).toISOString().slice(0, 10));
-        if (repoLastUpdated) activityDates.add(new Date(repoLastUpdated).toISOString().slice(0, 10));
-        if (activityDates.size > 0) {
-          console.log(`[DevStatus]   ✓ Fallback activity dates: ${[...activityDates].join(', ')}`);
-          return { _fromSummary: true, activityDates };
-        }
+        // Find most recent lastUpdated across all sections
+        const dates = [];
+        const prLast = prInfo?.overall?.lastUpdated || prInfo?.lastUpdated;
+        const commitLast = commitInfo?.overall?.lastUpdated || commitInfo?.lastUpdated;
+        const repoLast = repoInfo?.overall?.lastUpdated || repoInfo?.lastUpdated;
+        if (prLast) dates.push(prLast);
+        if (commitLast) dates.push(commitLast);
+        if (repoLast) dates.push(repoLast);
+
+        const lastActivity = dates.length > 0
+          ? dates.sort().reverse()[0].slice(0, 10)
+          : null;
+
+        const result = { lastActivity, prCount, prMerged, prOpen, repoCount, commitCount };
+        console.log(`[DevStatus]   ✓ Result: ${JSON.stringify(result)}`);
+        return result;
       }
-      break; // Summary worked, no need to try next version
+      break;
     } catch (e) {
       console.log(`[DevStatus]   summary error: ${e.message.substring(0, 200)}`);
     }
@@ -255,7 +257,7 @@ async function fetchDevStatus(issueId) {
   const detailResult = await fetchDevStatusDetail(issueId);
   if (detailResult) return detailResult;
 
-  console.log(`[DevStatus]   ✗ No commits found for issueId=${issueId}`);
+  console.log(`[DevStatus]   ✗ No activity found for issueId=${issueId}`);
   return null;
 }
 
@@ -292,12 +294,29 @@ async function fetchDevStatusDetail(issueId) {
         }
 
         const repos = entry.repositories || [];
-        const commitCount = repos.reduce((s, r) => s + (r.commits || []).length, 0);
-        console.log(`[DevStatus]     → "${instanceName}": ${repos.length} repos, ${commitCount} commits`);
+        const detailCommitCount = repos.reduce((s, r) => s + (r.commits || []).length, 0);
+        console.log(`[DevStatus]     → "${instanceName}": ${repos.length} repos, ${detailCommitCount} commits`);
 
-        if (commitCount > 0) {
-          console.log(`[DevStatus]   ✓ Found commits via detail ${version}/${appType}!`);
-          return data;
+        if (detailCommitCount > 0 || repos.length > 0) {
+          // Find latest commit date
+          let latestDate = null;
+          for (const repo of repos) {
+            for (const commit of (repo.commits || [])) {
+              const ts = commit.authorTimestamp || commit.timestamp || '';
+              if (ts) {
+                const d = new Date(ts).toISOString().slice(0, 10);
+                if (!latestDate || d > latestDate) latestDate = d;
+              }
+            }
+          }
+          const result = {
+            lastActivity: latestDate,
+            prCount: 0, prMerged: 0, prOpen: 0,
+            repoCount: repos.length,
+            commitCount: detailCommitCount
+          };
+          console.log(`[DevStatus]   ✓ Found via detail ${version}/${appType}: ${JSON.stringify(result)}`);
+          return result;
         }
       }
     } catch (e) {
@@ -307,43 +326,21 @@ async function fetchDevStatusDetail(issueId) {
   return null;
 }
 
-// Extract unique commit dates from dev-status response
-function extractCommitDates(devStatusData) {
-  const dates = new Set();
-  // Handle summary fallback format
-  if (devStatusData?._fromSummary) return devStatusData.activityDates;
-  if (!devStatusData?.detail) return dates;
-  for (const detail of devStatusData.detail) {
-    for (const repo of (detail.repositories || [])) {
-      for (const commit of (repo.commits || [])) {
-        const ts = commit.authorTimestamp || commit.timestamp || '';
-        if (ts) {
-          const dateStr = new Date(ts).toISOString().slice(0, 10);
-          dates.add(dateStr);
-        }
-      }
+// Aggregate git activity from children: take freshest lastActivity, sum counts
+function aggregateGitActivity(childGitData) {
+  const result = { lastActivity: null, prCount: 0, prMerged: 0, prOpen: 0, repoCount: 0, commitCount: 0 };
+  for (const git of childGitData) {
+    if (!git) continue;
+    if (git.lastActivity && (!result.lastActivity || git.lastActivity > result.lastActivity)) {
+      result.lastActivity = git.lastActivity;
     }
+    result.prCount += git.prCount || 0;
+    result.prMerged += git.prMerged || 0;
+    result.prOpen += git.prOpen || 0;
+    result.repoCount += git.repoCount || 0;
+    result.commitCount += git.commitCount || 0;
   }
-  return dates;
-}
-
-// Build daily commit activity map for an issue
-function buildDailyCommits(commitDates, days) {
-  const result = {};
-  for (const day of days) {
-    result[day] = commitDates.has(day) ? 1 : 0;
-  }
-  return result;
-}
-
-// Aggregate daily commits from children (max: if any child had commits, parent shows 1)
-function aggregateDailyCommits(childCommitMaps, days) {
-  const result = {};
-  for (const day of days) {
-    const hasCommit = childCommitMaps.some(m => m[day] === 1);
-    result[day] = hasCommit ? 1 : 0;
-  }
-  return result;
+  return result.lastActivity ? result : null;
 }
 
 // Build array of last N dates as YYYY-MM-DD strings
@@ -439,8 +436,8 @@ async function computeSnapshot(baseJql) {
   const days = getLast60Days();
   // dailyResults[issueKey] = { "YYYY-MM-DD": progress, ... }
   const dailyResults = {};
-  // dailyCommitResults[issueKey] = { "YYYY-MM-DD": 0|1, ... }
-  const dailyCommitResults = {};
+  // gitResults[issueKey] = { lastActivity, prCount, prMerged, prOpen, repoCount, commitCount }
+  const gitResults = {};
 
   try {
     snapshotState.phase = 'themes';
@@ -463,7 +460,7 @@ async function computeSnapshot(baseJql) {
       const themeIssue = await jiraGetIssue(theme.key);
       const milestoneLinkedKeys = extractLinkedKeys(themeIssue);
       const milestoneDailyMaps = [];
-      const milestoneCommitMaps = [];
+      const milestoneGitData = [];
 
       if (milestoneLinkedKeys.length > 0) {
         const msJql = `key in (${milestoneLinkedKeys.join(',')}) AND labels = milestone ORDER BY updated DESC`;
@@ -477,7 +474,7 @@ async function computeSnapshot(baseJql) {
           const msIssue = await jiraGetIssue(milestone.key);
           const epicLinkedKeys = extractLinkedKeys(msIssue);
           const epicDailyMaps = [];
-          const epicCommitMaps = [];
+          const epicGitData = [];
 
           if (epicLinkedKeys.length > 0) {
             const epJql = `key in (${epicLinkedKeys.join(',')}) AND (labels is EMPTY OR (labels != theme AND labels != milestone)) ORDER BY updated DESC`;
@@ -497,7 +494,7 @@ async function computeSnapshot(baseJql) {
                 const children = chData.issues || [];
                 const childDailyMaps = [];
 
-                const childCommitMaps = [];
+                const childGitList = [];
                 for (const child of children) {
                   // Get issue with changelog for backfill
                   const childFull = await jiraGetIssue(child.key, true);
@@ -508,12 +505,12 @@ async function computeSnapshot(baseJql) {
                   // Fetch git dev-status for leaf issue
                   try {
                     console.log(`[Snapshot] Fetching dev-status for leaf ${child.key} (id=${child.id || childFull.id})`);
-                    const devStatus = await fetchDevStatus(child.id || childFull.id);
-                    const commitDates = extractCommitDates(devStatus);
-                    console.log(`[Snapshot] ${child.key}: ${commitDates.size} commit dates found`);
-                    const childCommits = buildDailyCommits(commitDates, days);
-                    dailyCommitResults[child.key] = childCommits;
-                    childCommitMaps.push(childCommits);
+                    const git = await fetchDevStatus(child.id || childFull.id);
+                    if (git) {
+                      console.log(`[Snapshot] ${child.key}: git activity found, last=${git.lastActivity}`);
+                      gitResults[child.key] = git;
+                      childGitList.push(git);
+                    }
                   } catch (e) {
                     console.log(`[Snapshot] ${child.key}: dev-status error: ${e.message}`);
                   }
@@ -525,11 +522,13 @@ async function computeSnapshot(baseJql) {
                 dailyResults[epic.key] = epicDaily;
                 epicDailyMaps.push(epicDaily);
 
-                // Aggregate commits for epic
-                if (childCommitMaps.length > 0) {
-                  const epicCommits = aggregateDailyCommits(childCommitMaps, days);
-                  dailyCommitResults[epic.key] = epicCommits;
-                  epicCommitMaps.push(epicCommits);
+                // Aggregate git for epic
+                if (childGitList.length > 0) {
+                  const epicGit = aggregateGitActivity(childGitList);
+                  if (epicGit) {
+                    gitResults[epic.key] = epicGit;
+                    epicGitData.push(epicGit);
+                  }
                 }
               } else {
                 // Leaf story/task — fetch dev-status directly
@@ -539,12 +538,12 @@ async function computeSnapshot(baseJql) {
 
                 try {
                   console.log(`[Snapshot] Fetching dev-status for leaf epic/story ${epic.key} (id=${epic.id || epicIssue.id})`);
-                  const devStatus = await fetchDevStatus(epic.id || epicIssue.id);
-                  const commitDates = extractCommitDates(devStatus);
-                  console.log(`[Snapshot] ${epic.key}: ${commitDates.size} commit dates found`);
-                  const epicCommits = buildDailyCommits(commitDates, days);
-                  dailyCommitResults[epic.key] = epicCommits;
-                  epicCommitMaps.push(epicCommits);
+                  const git = await fetchDevStatus(epic.id || epicIssue.id);
+                  if (git) {
+                    console.log(`[Snapshot] ${epic.key}: git activity found, last=${git.lastActivity}`);
+                    gitResults[epic.key] = git;
+                    epicGitData.push(git);
+                  }
                 } catch (e) {
                   console.log(`[Snapshot] ${epic.key}: dev-status error: ${e.message}`);
                 }
@@ -557,11 +556,13 @@ async function computeSnapshot(baseJql) {
           dailyResults[milestone.key] = msDaily;
           milestoneDailyMaps.push(msDaily);
 
-          // Aggregate commits for milestone
-          if (epicCommitMaps.length > 0) {
-            const msCommits = aggregateDailyCommits(epicCommitMaps, days);
-            dailyCommitResults[milestone.key] = msCommits;
-            milestoneCommitMaps.push(msCommits);
+          // Aggregate git for milestone
+          if (epicGitData.length > 0) {
+            const msGit = aggregateGitActivity(epicGitData);
+            if (msGit) {
+              gitResults[milestone.key] = msGit;
+              milestoneGitData.push(msGit);
+            }
           }
 
           snapshotState.totalIssues++;
@@ -571,9 +572,10 @@ async function computeSnapshot(baseJql) {
       const themeDaily = averageDailyProgress(milestoneDailyMaps, days);
       dailyResults[theme.key] = themeDaily;
 
-      // Aggregate commits for theme
-      if (milestoneCommitMaps.length > 0) {
-        dailyCommitResults[theme.key] = aggregateDailyCommits(milestoneCommitMaps, days);
+      // Aggregate git for theme
+      if (milestoneGitData.length > 0) {
+        const themeGit = aggregateGitActivity(milestoneGitData);
+        if (themeGit) gitResults[theme.key] = themeGit;
       }
 
       snapshotState.totalIssues++;
@@ -585,14 +587,12 @@ async function computeSnapshot(baseJql) {
       for (const [key, dailyMap] of Object.entries(dailyResults)) {
         if (dailyMap[day] !== undefined) {
           const entry = { progress: dailyMap[day] };
-          // Add commits if available
-          if (dailyCommitResults[key] && dailyCommitResults[key][day] !== undefined) {
-            entry.commits = dailyCommitResults[key][day];
-          }
           PROGRESS_DATA.snapshots[day][key] = entry;
         }
       }
     }
+    // Save git activity separately (not per-day, just latest state)
+    PROGRESS_DATA.gitActivity = gitResults;
     PROGRESS_DATA.lastRun = new Date().toISOString();
     saveProgressData();
 
@@ -841,7 +841,7 @@ const server = http.createServer((req, res) => {
   // Progress history — GET all snapshots
   if (pathname === '/api/progress/history' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ snapshots: PROGRESS_DATA.snapshots, lastRun: PROGRESS_DATA.lastRun }));
+    res.end(JSON.stringify({ snapshots: PROGRESS_DATA.snapshots, gitActivity: PROGRESS_DATA.gitActivity || {}, lastRun: PROGRESS_DATA.lastRun }));
     return;
   }
 

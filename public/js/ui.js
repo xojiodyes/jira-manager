@@ -232,66 +232,148 @@ const UI = {
     </svg>`;
   },
   /**
-   * Render activity sparkline (binary bar chart for git commits)
-   * @param {Array<{date: string, commits: 0|1}>} dataPoints
-   * @param {number} width
-   * @param {number} height
-   * @returns {string} HTML string
+   * Get git dot color based on last activity date freshness
+   * @param {string|null} lastActivity - "YYYY-MM-DD" date string
+   * @returns {{ color: string, className: string }}
    */
-  _buildActivityTooltip(dataPoints) {
-    if (!dataPoints || dataPoints.length === 0) return '';
-    // Group by ISO week
-    const weeks = {};
-    for (const dp of dataPoints) {
-      const d = new Date(dp.date + 'T00:00:00');
-      const day = d.getDay();
-      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-      const monday = new Date(d);
-      monday.setDate(diff);
-      const weekKey = monday.toISOString().slice(0, 10);
-      if (!weeks[weekKey]) weeks[weekKey] = 0;
-      if (dp.commits) weeks[weekKey]++;
-    }
-    const lines = [];
-    const weekKeys = Object.keys(weeks).sort();
-    for (const wk of weekKeys) {
-      const d = new Date(wk + 'T00:00:00');
-      const label = d.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
-      lines.push(`${label}: ${weeks[wk]} day${weeks[wk] !== 1 ? 's' : ''}`);
-    }
-    return lines.join('\n');
+  _getGitDotColor(lastActivity) {
+    if (!lastActivity) return { color: '#DFE1E6', className: 'git-dot--gray' };
+    const now = new Date();
+    const last = new Date(lastActivity + 'T00:00:00');
+    const diffDays = Math.floor((now - last) / 86400000);
+    if (diffDays <= 7) return { color: '#36B37E', className: 'git-dot--green' };
+    if (diffDays <= 30) return { color: '#FFAB00', className: 'git-dot--yellow' };
+    return { color: '#FF5630', className: 'git-dot--red' };
   },
 
-  renderActivitySparkline(dataPoints, width = 80, height = 20) {
-    if (!dataPoints || dataPoints.length === 0) {
-      return '<span class="sparkline-empty">--</span>';
+  /**
+   * Render git activity dot indicator
+   * @param {Object|null} gitData - { lastActivity, prCount, prMerged, prOpen, repoCount, commitCount }
+   * @param {string} issueKey - issue key for popup data binding
+   * @returns {string} HTML string
+   */
+  renderGitDot(gitData, issueKey) {
+    if (!gitData || !gitData.lastActivity) {
+      return '<span class="git-dot git-dot--gray" title="No git activity"></span>';
+    }
+    const { className } = this._getGitDotColor(gitData.lastActivity);
+    const relDate = this.formatRelativeDate(gitData.lastActivity);
+    return `<span class="git-dot ${className}" data-issue-key="${this.escapeHtml(issueKey)}" title="Last activity: ${relDate}"></span>`;
+  },
+
+  /**
+   * Show git activity popup
+   * @param {Object} gitData - { lastActivity, prCount, prMerged, prOpen, repoCount, commitCount }
+   * @param {HTMLElement} anchorEl - dot element to anchor popup to
+   * @param {string} issueKey
+   * @param {Object} childrenGit - { "CHILD-1": gitData, ... } for parent issues
+   */
+  showGitPopup(gitData, anchorEl, issueKey, childrenGit) {
+    this.hideGitPopup();
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'git-popup-backdrop';
+    backdrop.addEventListener('click', () => this.hideGitPopup());
+
+    const popup = document.createElement('div');
+    popup.className = 'git-popup';
+
+    // Header
+    let html = `<div class="git-popup-header">
+      <span class="git-popup-title">${this.escapeHtml(issueKey)}</span>
+      <button class="git-popup-close" onclick="UI.hideGitPopup()">✕</button>
+    </div>`;
+
+    // Activity info
+    html += '<div class="git-popup-body">';
+
+    if (gitData && gitData.lastActivity) {
+      const relDate = this.formatRelativeDate(gitData.lastActivity);
+      const { color } = this._getGitDotColor(gitData.lastActivity);
+      html += `<div class="git-popup-row">
+        <span class="git-popup-label">Last activity</span>
+        <span class="git-popup-value" style="color:${color};font-weight:600">${relDate}</span>
+      </div>`;
+
+      if (gitData.prCount > 0) {
+        let prText = `${gitData.prCount} PR`;
+        if (gitData.prCount > 1) prText += 's';
+        const details = [];
+        if (gitData.prMerged > 0) details.push(`${gitData.prMerged} merged`);
+        if (gitData.prOpen > 0) details.push(`${gitData.prOpen} open`);
+        if (details.length > 0) prText += ` (${details.join(', ')})`;
+        html += `<div class="git-popup-row">
+          <span class="git-popup-label">Pull Requests</span>
+          <span class="git-popup-value">${prText}</span>
+        </div>`;
+      }
+
+      if (gitData.repoCount > 0) {
+        html += `<div class="git-popup-row">
+          <span class="git-popup-label">Repositories</span>
+          <span class="git-popup-value">${gitData.repoCount}</span>
+        </div>`;
+      }
+
+      if (gitData.commitCount > 0) {
+        html += `<div class="git-popup-row">
+          <span class="git-popup-label">Commits</span>
+          <span class="git-popup-value">${gitData.commitCount}</span>
+        </div>`;
+      }
+    } else {
+      html += '<div class="git-popup-empty">No git activity</div>';
     }
 
-    // Check if there's any activity at all
-    const hasActivity = dataPoints.some(d => d.commits === 1);
-    if (!hasActivity) {
-      return '<span class="sparkline-empty">--</span>';
-    }
+    // Children activity for parent issues
+    if (childrenGit && Object.keys(childrenGit).length > 0) {
+      const entries = Object.entries(childrenGit)
+        .filter(([, g]) => g && g.lastActivity)
+        .sort((a, b) => (b[1].lastActivity || '').localeCompare(a[1].lastActivity || ''));
 
-    const pad = 2;
-    const barWidth = 1.5;
-    const gap = (width - pad * 2) / dataPoints.length;
-    const barHeight = height - pad * 2;
-
-    const tooltip = this._buildActivityTooltip(dataPoints);
-
-    let bars = '';
-    for (let i = 0; i < dataPoints.length; i++) {
-      if (dataPoints[i].commits === 1) {
-        const x = pad + i * gap;
-        bars += `<rect x="${x.toFixed(1)}" y="${pad}" width="${barWidth}" height="${barHeight}" fill="#0052cc" opacity="0.7" rx="0.5"/>`;
+      if (entries.length > 0) {
+        html += '<div class="git-popup-divider"></div>';
+        html += `<div class="git-popup-section-title">Child issues (${entries.length})</div>`;
+        for (const [key, g] of entries) {
+          const rel = this.formatRelativeDate(g.lastActivity);
+          const { color } = this._getGitDotColor(g.lastActivity);
+          const prInfo = g.prCount > 0 ? ` · ${g.prCount} PR` : '';
+          html += `<div class="git-popup-child">
+            <span class="git-popup-child-dot" style="background:${color}"></span>
+            <span class="git-popup-child-key">${this.escapeHtml(key)}</span>
+            <span class="git-popup-child-date">${rel}${prInfo}</span>
+          </div>`;
+        }
       }
     }
 
-    return `<svg class="sparkline activity-sparkline" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-      <title>${tooltip}</title>
-      ${bars}
-    </svg>`;
+    html += '</div>';
+    popup.innerHTML = html;
+
+    document.body.appendChild(backdrop);
+    document.body.appendChild(popup);
+
+    // Position popup near anchor
+    const rect = anchorEl.getBoundingClientRect();
+    const popupHeight = 300; // estimate
+    const spaceBelow = window.innerHeight - rect.bottom;
+
+    popup.style.left = Math.max(8, Math.min(rect.left - 100, window.innerWidth - 280)) + 'px';
+    if (spaceBelow < popupHeight && rect.top > popupHeight) {
+      popup.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+    } else {
+      popup.style.top = (rect.bottom + 4) + 'px';
+    }
+  },
+
+  /**
+   * Hide git activity popup
+   */
+  hideGitPopup() {
+    const existing = document.querySelector('.git-popup');
+    if (existing) existing.remove();
+    const backdrop = document.querySelector('.git-popup-backdrop');
+    if (backdrop) backdrop.remove();
   }
 };
 

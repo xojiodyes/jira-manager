@@ -697,6 +697,63 @@ function handleMockRequest(jiraPath, query, method, reqBody) {
     ] } };
   }
 
+  // /rest/dev-status/1.0/issue/summary — mock git activity summary
+  if (jiraPath === '/rest/dev-status/1.0/issue/summary') {
+    const params = new URLSearchParams(query ? query.replace('?', '') : '');
+    const issueId = params.get('issueId');
+    const issue = ISSUES.find(i => i.id === issueId);
+    if (!issue) {
+      return { status: 200, body: { summary: {} } };
+    }
+
+    const statusName = issue.fields.status?.name || 'To Do';
+    if (statusName === 'To Do') {
+      return { status: 200, body: { summary: { pullrequest: { overall: { count: 0 } }, repository: { overall: { count: 0 } } } } };
+    }
+
+    // Generate mock summary based on status
+    const now = new Date();
+    const daysAgo = statusName === 'Done' ? Math.floor(Math.random() * 60) + 5
+      : statusName === 'In Review' ? Math.floor(Math.random() * 14)
+      : Math.floor(Math.random() * 7);
+    const lastDate = new Date(now);
+    lastDate.setDate(lastDate.getDate() - daysAgo);
+    const lastUpdated = lastDate.toISOString();
+
+    const prCount = statusName === 'Done' ? Math.floor(Math.random() * 3) + 1
+      : statusName === 'In Review' ? Math.floor(Math.random() * 2) + 1
+      : Math.random() < 0.5 ? 1 : 0;
+    const mergedCount = statusName === 'Done' ? prCount : Math.floor(prCount / 2);
+    const openCount = prCount - mergedCount;
+    const repoCount = Math.floor(Math.random() * 3) + 1;
+
+    return {
+      status: 200,
+      body: {
+        errors: [],
+        summary: {
+          pullrequest: {
+            overall: {
+              count: prCount,
+              lastUpdated,
+              stateCount: prCount,
+              state: mergedCount > 0 ? 'MERGED' : 'OPEN',
+              details: { openCount, mergedCount, declinedCount: 0 },
+              open: openCount > 0
+            },
+            byInstanceType: { stash: { count: prCount, name: 'Mock Bitbucket' } }
+          },
+          repository: {
+            overall: {
+              count: repoCount,
+              lastUpdated
+            }
+          }
+        }
+      }
+    };
+  }
+
   // /rest/dev-status/1.0/issue/detail — mock git commit activity
   if (jiraPath === '/rest/dev-status/1.0/issue/detail') {
     const params = new URLSearchParams(query ? query.replace('?', '') : '');

@@ -26,8 +26,8 @@ class App {
 
     // Progress history for sparklines
     this.progressHistory = {}; // { "KEY": [{ date, progress }, ...] }
-    // Commit history for git activity sparklines
-    this.commitHistory = {}; // { "KEY": [{ date, commits: 0|1 }, ...] }
+    // Git activity data per issue
+    this.gitActivity = {}; // { "KEY": { lastActivity, prCount, prMerged, prOpen, repoCount, commitCount } }
 
     this.init();
   }
@@ -62,15 +62,16 @@ class App {
       const res = await fetch('/api/progress/history');
       const data = await res.json();
       this.progressHistory = this._transformSnapshots(data.snapshots || {});
+      this.gitActivity = data.gitActivity || {};
     } catch (err) {
       console.error('Failed to load progress history:', err);
       this.progressHistory = {};
+      this.gitActivity = {};
     }
   }
 
   _transformSnapshots(snapshots) {
     const progressResult = {};
-    const commitResult = {};
     const dates = Object.keys(snapshots).sort();
     // Keep last 60 days
     const cutoff = new Date();
@@ -83,14 +84,8 @@ class App {
       for (const [key, val] of Object.entries(issues)) {
         if (!progressResult[key]) progressResult[key] = [];
         progressResult[key].push({ date, progress: val.progress });
-
-        if (val.commits !== undefined) {
-          if (!commitResult[key]) commitResult[key] = [];
-          commitResult[key].push({ date, commits: val.commits });
-        }
       }
     }
-    this.commitHistory = commitResult;
     return progressResult;
   }
 
@@ -390,7 +385,21 @@ class App {
 
     // ESC/ArrowLeft to close modals + keyboard navigation
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' || (e.key === 'ArrowLeft' && document.querySelector('.modal.active'))) {
+      if (e.key === 'Escape') {
+        // Close git popup first if open
+        if (document.querySelector('.git-popup')) {
+          UI.hideGitPopup();
+          e.preventDefault();
+          return;
+        }
+        // Then close modals
+        document.querySelectorAll('.modal.active').forEach(modal => {
+          modal.classList.remove('active');
+        });
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'ArrowLeft' && document.querySelector('.modal.active')) {
         document.querySelectorAll('.modal.active').forEach(modal => {
           modal.classList.remove('active');
         });
@@ -399,6 +408,74 @@ class App {
       }
       this.handleKeyboardNav(e);
     });
+  }
+
+  _handleGitDotClick(dotEl) {
+    const issueKey = dotEl.dataset.issueKey;
+    const gitData = this.gitActivity[issueKey] || null;
+
+    // Collect children git data for parent issues
+    const childrenGit = {};
+    // Check all gitActivity keys that might be children of this issue
+    // We look through loaded hierarchy data for children
+    const allIssues = this._getAllLoadedIssues();
+    const parentIssue = allIssues.find(i => i.key === issueKey);
+    if (parentIssue && parentIssue._childKeys) {
+      for (const ck of parentIssue._childKeys) {
+        if (this.gitActivity[ck]) {
+          childrenGit[ck] = this.gitActivity[ck];
+        }
+      }
+    }
+
+    UI.showGitPopup(gitData, dotEl, issueKey, childrenGit);
+  }
+
+  _getAllLoadedIssues() {
+    // Collect all issues from current hierarchy state
+    const result = [];
+    const collectFromList = (list, childKeysFn) => {
+      if (!list) return;
+      for (const item of list) {
+        const issue = { key: item.key, _childKeys: childKeysFn ? childKeysFn(item) : [] };
+        result.push(issue);
+      }
+    };
+    // Themes
+    collectFromList(this.themes, t => {
+      const ms = this.milestonesByTheme?.[t.key] || [];
+      const keys = ms.map(m => m.key);
+      // Also add epic keys for each milestone
+      for (const m of ms) {
+        const epics = this.epicsByMilestone?.[m.key] || [];
+        keys.push(...epics.map(e => e.key));
+        for (const e of epics) {
+          const children = this.childrenByEpic?.[e.key] || [];
+          keys.push(...children.map(c => c.key));
+        }
+      }
+      return keys;
+    });
+    // Milestones
+    if (this.milestones) {
+      collectFromList(this.milestones, m => {
+        const epics = this.epicsByMilestone?.[m.key] || [];
+        const keys = epics.map(e => e.key);
+        for (const e of epics) {
+          const children = this.childrenByEpic?.[e.key] || [];
+          keys.push(...children.map(c => c.key));
+        }
+        return keys;
+      });
+    }
+    // Epics in tasks view
+    if (this.epics) {
+      collectFromList(this.epics, e => {
+        const children = this.childrenByEpic?.[e.key] || [];
+        return children.map(c => c.key);
+      });
+    }
+    return result;
   }
 
   async showIssueDetail(issueKey) {
@@ -791,14 +868,14 @@ class App {
       html += `
         <div class="hierarchy-row" data-key="${issue.key}" data-level="${level}">
           <div class="hierarchy-row-main">
-            <span class="issue-key" data-key="${issue.key}">${issue.key}</span>
+            <a href="${jiraAPI.getIssueUrl(issue.key)}" target="_blank" class="issue-key" onclick="event.stopPropagation()" title="Open in Jira">${issue.key}</a>
             <span class="hierarchy-summary">${UI.escapeHtml(f.summary)}</span>
             <span class="editable-field editable-status" data-key="${issue.key}" data-field="status" title="Status (0-100)">${status !== null ? status + '%' : '—'}</span>
             <span class="editable-field editable-confidence" data-key="${issue.key}" data-field="confidence" title="Confidence (0-100)">${confidence !== null ? confidence + '%' : '—'}</span>
             <span class="hierarchy-items-count" title="Child items">${childCount}</span>
             <span class="hierarchy-sparkline">${UI.renderSparkline(this.progressHistory[issue.key] || [])}</span>
-            <span class="hierarchy-sparkline">${UI.renderActivitySparkline(this.commitHistory[issue.key] || [])}</span>
-            <a href="${jiraAPI.getIssueUrl(issue.key)}" target="_blank" class="hierarchy-jira-link" title="Open in Jira" onclick="event.stopPropagation()">↗</a>
+            <span class="hierarchy-git-dot">${UI.renderGitDot(this.gitActivity[issue.key], issue.key)}</span>
+            <span class="hierarchy-detail-btn" data-key="${issue.key}" title="View details">👁</span>
           </div>
         </div>
       `;
@@ -809,14 +886,20 @@ class App {
     // Bind click handlers
     container.querySelectorAll('.hierarchy-row').forEach(row => {
       row.addEventListener('click', (e) => {
+        // If clicking on git dot, show popup
+        if (e.target.classList.contains('git-dot') && e.target.dataset.issueKey) {
+          e.stopPropagation();
+          this._handleGitDotClick(e.target);
+          return;
+        }
         // If clicking on editable field, handle inline edit
         if (e.target.classList.contains('editable-field')) {
           e.stopPropagation();
           this.startInlineEdit(e.target);
           return;
         }
-        // If clicking on issue key specifically, open detail modal
-        if (e.target.classList.contains('issue-key')) {
+        // If clicking on detail button (eye icon), open detail modal
+        if (e.target.classList.contains('hierarchy-detail-btn')) {
           this.showIssueDetail(e.target.dataset.key);
           return;
         }
@@ -1091,7 +1174,7 @@ class App {
     if (showItemsCount) colgroup += '<col style="width: 50px;">';  // Items
     if (showProgress) colgroup += '<col style="width: 80px;">';   // Progress
     colgroup += '<col style="width: 84px;">';   // Trend
-    colgroup += '<col style="width: 84px;">';   // Git
+    colgroup += '<col style="width: 36px;">';   // Git
     colgroup += '<col style="width: 140px;">';  // Assignee
     colgroup += '<col style="width: 36px;">';   // Link
     colgroup += '</colgroup>';
@@ -1137,7 +1220,7 @@ class App {
               </span>`}
           </td>
           <td>
-            <span class="issue-key" data-key="${issue.key}">${issue.key}</span>
+            <a href="${jiraAPI.getIssueUrl(issue.key)}" target="_blank" class="issue-key" title="Open in Jira">${issue.key}</a>
           </td>
           <td>
             <div class="issue-summary" title="${UI.escapeHtml(f.summary)}">${UI.escapeHtml(f.summary || '-')}</div>
@@ -1174,7 +1257,7 @@ class App {
       }
 
       html += `<td class="sparkline-cell">${UI.renderSparkline(this.progressHistory[issue.key] || [])}</td>`;
-      html += `<td class="sparkline-cell">${UI.renderActivitySparkline(this.commitHistory[issue.key] || [])}</td>`;
+      html += `<td class="git-dot-cell">${UI.renderGitDot(this.gitActivity[issue.key], issue.key)}</td>`;
 
       html += `
           <td>
@@ -1186,7 +1269,7 @@ class App {
               : '<span class="assignee-unassigned">Unassigned</span>'}
           </td>
           <td>
-            <a href="${jiraAPI.getIssueUrl(issue.key)}" target="_blank" class="table-jira-link" title="Open in Jira">↗</a>
+            <span class="table-detail-btn" data-key="${issue.key}" title="View details">👁</span>
           </td>
         </tr>
       `;
@@ -1195,9 +1278,10 @@ class App {
     html += '</tbody></table>';
     container.innerHTML = html;
 
-    // Bind click handlers for issue keys and editable fields
-    container.querySelectorAll('.issue-key').forEach(el => {
-      el.addEventListener('click', () => {
+    // Bind click handlers for detail buttons (eye icon) and editable fields
+    container.querySelectorAll('.table-detail-btn').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
         this.showIssueDetail(el.dataset.key);
       });
     });
@@ -1209,12 +1293,20 @@ class App {
       });
     });
 
+    // Git dot click handlers
+    container.querySelectorAll('.git-dot[data-issue-key]').forEach(dot => {
+      dot.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._handleGitDotClick(dot);
+      });
+    });
+
     // Make epic rows clickable to load their child tasks
     container.querySelectorAll('tr.epic-row').forEach(row => {
       row.style.cursor = 'pointer';
       row.addEventListener('click', (e) => {
-        // Don't trigger if clicking on issue-key or editable-field
-        if (e.target.classList.contains('issue-key') || e.target.classList.contains('editable-field')) return;
+        // Don't trigger if clicking on interactive elements
+        if (e.target.classList.contains('issue-key') || e.target.classList.contains('editable-field') || e.target.classList.contains('git-dot') || e.target.classList.contains('table-detail-btn')) return;
         this.selectEpic(row.dataset.key);
       });
     });

@@ -521,9 +521,134 @@ a:hover {
   color: var(--color-text-muted, #97a0af);
   font-size: 11px;
 }
-.activity-sparkline {
+/* Git activity dot */
+.git-dot {
   display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  cursor: pointer;
   vertical-align: middle;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.git-dot:hover {
+  transform: scale(1.3);
+  box-shadow: 0 0 4px rgba(0,0,0,0.3);
+}
+.git-dot--green { background-color: #36B37E; }
+.git-dot--yellow { background-color: #FFAB00; }
+.git-dot--red { background-color: #FF5630; }
+.git-dot--gray { background-color: #DFE1E6; cursor: default; }
+.git-dot--gray:hover { transform: none; box-shadow: none; }
+
+.git-dot-cell {
+  text-align: center;
+  width: 32px;
+}
+.hierarchy-git-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+}
+
+/* Git popup */
+.git-popup-backdrop {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 999;
+}
+.git-popup {
+  position: fixed;
+  z-index: 1000;
+  width: 260px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #dfe1e6;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  font-size: 13px;
+}
+.git-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.git-popup-title {
+  font-weight: 600;
+  color: #172b4d;
+}
+.git-popup-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #97a0af;
+  padding: 0 2px;
+}
+.git-popup-close:hover {
+  color: #172b4d;
+}
+.git-popup-body {
+  padding: 10px 12px;
+}
+.git-popup-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+.git-popup-label {
+  color: #6b778c;
+  font-size: 12px;
+}
+.git-popup-value {
+  color: #172b4d;
+  font-size: 12px;
+}
+.git-popup-empty {
+  color: #97a0af;
+  text-align: center;
+  padding: 12px 0;
+  font-size: 12px;
+}
+.git-popup-divider {
+  height: 1px;
+  background: #f0f0f0;
+  margin: 8px 0;
+}
+.git-popup-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b778c;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.git-popup-child {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 12px;
+}
+.git-popup-child-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.git-popup-child-key {
+  color: #0052cc;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.git-popup-child-date {
+  color: #6b778c;
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 /* Snapshot button */
@@ -1111,21 +1236,23 @@ a:hover {
   margin: 0;
 }
 
-/* Jira link in hierarchy list */
-.hierarchy-jira-link {
+/* Detail button (eye icon) in hierarchy list */
+.hierarchy-detail-btn {
   flex-shrink: 0;
   width: 24px;
   text-align: center;
-  font-size: 14px;
-  color: var(--color-text-muted);
-  text-decoration: none;
-  opacity: 0.4;
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0.35;
   transition: opacity 0.15s;
+  user-select: none;
 }
 
-.hierarchy-row:hover .hierarchy-jira-link {
-  opacity: 1;
-  color: var(--color-primary);
+.hierarchy-row:hover .hierarchy-detail-btn {
+  opacity: 0.8;
+}
+.hierarchy-detail-btn:hover {
+  opacity: 1 !important;
 }
 
 .hlh-link {
@@ -1133,18 +1260,20 @@ a:hover {
   flex-shrink: 0;
 }
 
-/* Jira link in tasks table */
-.table-jira-link {
-  font-size: 14px;
-  color: var(--color-text-muted);
-  text-decoration: none;
-  opacity: 0.4;
+/* Detail button (eye icon) in tasks table */
+.table-detail-btn {
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0.35;
   transition: opacity 0.15s;
+  user-select: none;
 }
 
-tr:hover .table-jira-link {
-  opacity: 1;
-  color: var(--color-primary);
+tr:hover .table-detail-btn {
+  opacity: 0.8;
+}
+.table-detail-btn:hover {
+  opacity: 1 !important;
 }
 
 /* History in issue detail */
