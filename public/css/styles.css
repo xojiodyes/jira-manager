@@ -554,6 +554,24 @@ a:hover {
 .trend-popup-chart {
   padding: 4px 0 0;
 }
+/* Dev/QA popup */
+.devqa-popup-backdrop {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 999;
+}
+.devqa-popup {
+  position: fixed;
+  z-index: 1000;
+  width: 210px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #dfe1e6;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  font-size: 13px;
+}
 /* Git activity dot */
 .git-dot {
   display: inline-block;
@@ -1143,6 +1161,13 @@ a:hover {
 .assignee-small {
   font-size: 12px;
   color: var(--color-text-secondary);
+}
+
+.devqa-clickable {
+  cursor: pointer;
+}
+.devqa-clickable:hover {
+  opacity: 0.7;
 }
 
 .hierarchy-items-count,

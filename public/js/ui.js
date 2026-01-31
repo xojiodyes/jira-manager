@@ -493,6 +493,67 @@ const UI = {
     if (backdrop) backdrop.remove();
   },
 
+  showDevQaPopup(devsByRole, anchorEl, issueKey) {
+    this.hideDevQaPopup();
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'devqa-popup-backdrop';
+    backdrop.addEventListener('click', () => this.hideDevQaPopup());
+
+    const popup = document.createElement('div');
+    popup.className = 'devqa-popup';
+
+    const roleLabels = { Dev: 'Development', QA: 'QA / Testing' };
+    const roleOrder = ['Dev', 'QA'];
+
+    let html = `<div class="git-popup-header">
+      <span class="git-popup-title">${this.escapeHtml(issueKey)} — Dev/QA</span>
+      <button class="git-popup-close" onclick="UI.hideDevQaPopup()">&#x2715;</button>
+    </div><div class="git-popup-body">`;
+
+    let hasContent = false;
+    for (const role of roleOrder) {
+      const devs = devsByRole[role];
+      if (!devs || devs.length === 0) continue;
+      hasContent = true;
+      html += `<div class="git-popup-section-title">${roleLabels[role] || role} (${devs.length})</div>`;
+      for (const d of devs) {
+        html += `<div class="git-popup-child">
+          ${d.avatarUrl ? `<img src="${d.avatarUrl}" style="width:16px;height:16px;border-radius:50%;vertical-align:middle;margin-right:4px" alt="">` : ''}
+          <span>${this.escapeHtml(d.displayName)}</span>
+        </div>`;
+      }
+    }
+
+    if (!hasContent) {
+      html += '<div class="git-popup-empty">No Dev/QA data</div>';
+    }
+
+    html += '</div>';
+    popup.innerHTML = html;
+
+    document.body.appendChild(backdrop);
+    document.body.appendChild(popup);
+
+    const rect = anchorEl.getBoundingClientRect();
+    const popupHeight = 200;
+    const spaceBelow = window.innerHeight - rect.bottom;
+
+    popup.style.left = Math.max(8, Math.min(rect.left - 60, window.innerWidth - 220)) + 'px';
+    if (spaceBelow < popupHeight && rect.top > popupHeight) {
+      popup.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+    } else {
+      popup.style.top = (rect.bottom + 4) + 'px';
+    }
+  },
+
+  hideDevQaPopup() {
+    const existing = document.querySelector('.devqa-popup');
+    if (existing) existing.remove();
+    const backdrop = document.querySelector('.devqa-popup-backdrop');
+    if (backdrop) backdrop.remove();
+  },
+
   _fmtShortDate(dateStr) {
     const d = new Date(dateStr + 'T00:00:00');
     return d.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });

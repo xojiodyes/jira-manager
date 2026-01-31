@@ -430,7 +430,13 @@ class App {
     // ESC/ArrowLeft to close modals + keyboard navigation
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        // Close trend popup first if open
+        // Close devqa popup first if open
+        if (document.querySelector('.devqa-popup')) {
+          UI.hideDevQaPopup();
+          e.preventDefault();
+          return;
+        }
+        // Close trend popup if open
         if (document.querySelector('.trend-popup')) {
           UI.hideTrendPopup();
           e.preventDefault();
@@ -498,6 +504,12 @@ class App {
     }
 
     UI.showTrendPopup(dataPoints, sparklineEl, issueKey, childrenProgress);
+  }
+
+  _handleDevQaClick(el) {
+    const issueKey = el.dataset.key;
+    const devsByRole = this.developers[issueKey] || {};
+    UI.showDevQaPopup(devsByRole, el, issueKey);
   }
 
   _getDevQaInfo(issueKey) {
@@ -651,20 +663,6 @@ class App {
         </div>
       </div>
 
-      <div class="issue-detail-section">
-        <h4>Local Data</h4>
-        <div class="issue-detail-meta">
-          <div class="issue-meta-item">
-            <span class="issue-meta-label">Status (%)</span>
-            <span class="editable-field editable-status" data-key="${issue.key}" data-field="status" title="Status (0-100)">${this.getLocalField(issue.key, 'status') !== null ? this.getLocalField(issue.key, 'status') + '%' : '—'}</span>
-          </div>
-          <div class="issue-meta-item">
-            <span class="issue-meta-label">Confidence (%)</span>
-            <span class="editable-field editable-confidence" data-key="${issue.key}" data-field="confidence" title="Confidence (0-100)">${this.getLocalField(issue.key, 'confidence') !== null ? this.getLocalField(issue.key, 'confidence') + '%' : '—'}</span>
-          </div>
-        </div>
-      </div>
-
       ${(() => {
         const devsByRole = this.developers[issue.key] || {};
         const roles = Object.keys(devsByRole);
@@ -690,6 +688,20 @@ class App {
             `).join('')}
           </div>`;
       })()}
+
+      <div class="issue-detail-section">
+        <h4>Local Data</h4>
+        <div class="issue-detail-meta">
+          <div class="issue-meta-item">
+            <span class="issue-meta-label">Status (%)</span>
+            <span class="editable-field editable-status" data-key="${issue.key}" data-field="status" title="Status (0-100)">${this.getLocalField(issue.key, 'status') !== null ? this.getLocalField(issue.key, 'status') + '%' : '—'}</span>
+          </div>
+          <div class="issue-meta-item">
+            <span class="issue-meta-label">Confidence (%)</span>
+            <span class="editable-field editable-confidence" data-key="${issue.key}" data-field="confidence" title="Confidence (0-100)">${this.getLocalField(issue.key, 'confidence') !== null ? this.getLocalField(issue.key, 'confidence') + '%' : '—'}</span>
+          </div>
+        </div>
+      </div>
 
       ${history.length ? `
         <div class="issue-detail-section">
@@ -976,7 +988,7 @@ class App {
             <a href="${jiraAPI.getIssueUrl(issue.key)}" target="_blank" class="issue-key" onclick="event.stopPropagation()" title="Open in Jira">${issue.key}</a>
             <span class="hierarchy-summary">${UI.escapeHtml(f.summary)}</span>
             <span class="hierarchy-items-count" title="Child items">${childCount}</span>
-            ${(() => { const dq = this._getDevQaInfo(issue.key); return `<span class="hierarchy-devqa-count" title="${UI.escapeHtml(dq.tooltip)}">${dq.count || ''}</span>`; })()}
+            <span class="hierarchy-devqa-count devqa-clickable" data-key="${issue.key}">${this._getDevQaInfo(issue.key).count || ''}</span>
             <span class="hierarchy-sparkline">${UI.renderSparkline(this.progressHistory[issue.key] || [], issue.key)}</span>
             <span class="hierarchy-git-dot">${UI.renderGitDot(this.gitActivity[issue.key], issue.key)}</span>
           </div>
@@ -1000,6 +1012,12 @@ class App {
         if (e.target.classList.contains('git-dot') && e.target.dataset.issueKey) {
           e.stopPropagation();
           this._handleGitDotClick(e.target);
+          return;
+        }
+        // If clicking on D/Q badge, show popup
+        if (e.target.classList.contains('devqa-clickable') && e.target.dataset.key) {
+          e.stopPropagation();
+          this._handleDevQaClick(e.target);
           return;
         }
         // If clicking on detail button (eye icon), open detail modal
@@ -1339,7 +1357,7 @@ class App {
       if (showItemsCount) {
         html += `<td class="items-count-cell">${childCount || ''}</td>`;
         const dq = this._getDevQaInfo(issue.key);
-        html += `<td class="items-count-cell" title="${UI.escapeHtml(dq.tooltip)}">${dq.count || ''}</td>`;
+        html += `<td class="items-count-cell"><span class="devqa-clickable" data-key="${issue.key}">${dq.count || ''}</span></td>`;
       }
 
       if (showProgress) {
@@ -1390,6 +1408,14 @@ class App {
       });
     });
 
+    // Dev/QA click handlers
+    container.querySelectorAll('.devqa-clickable[data-key]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._handleDevQaClick(el);
+      });
+    });
+
     // Make epic rows clickable to load their child tasks
     container.querySelectorAll('tr.epic-row').forEach(row => {
       row.style.cursor = 'pointer';
@@ -1397,7 +1423,7 @@ class App {
         // Don't trigger if clicking on interactive elements
         const sparkline = e.target.closest('.sparkline-clickable');
         if (sparkline) return;
-        if (e.target.classList.contains('issue-key') || e.target.classList.contains('git-dot') || e.target.classList.contains('table-detail-btn')) return;
+        if (e.target.classList.contains('issue-key') || e.target.classList.contains('git-dot') || e.target.classList.contains('table-detail-btn') || e.target.classList.contains('devqa-clickable')) return;
         this.selectEpic(row.dataset.key);
       });
     });
