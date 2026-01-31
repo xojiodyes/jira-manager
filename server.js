@@ -134,15 +134,29 @@ function jiraFetch(apiPath, method = 'GET', body = null) {
       headers: { 'Authorization': auth, 'Content-Type': 'application/json', 'Accept': 'application/json' }
     };
 
+    const isDevStatus = apiPath.includes('dev-status');
+    if (isDevStatus) {
+      console.log(`[jiraFetch] ${method} ${CONFIG._protocol}//${CONFIG._hostname}:${CONFIG._port}${fullPath}`);
+    }
+
     const req = httpModule.request(options, (res) => {
       let data = '';
       res.on('data', chunk => { data += chunk; });
       res.on('end', () => {
+        if (isDevStatus) {
+          console.log(`[jiraFetch] Response status=${res.statusCode}, body=${data.substring(0, 500)}`);
+        }
+        if (res.statusCode >= 400) {
+          return reject(new Error(`HTTP ${res.statusCode}: ${data.substring(0, 200)}`));
+        }
         try { resolve(JSON.parse(data)); }
         catch (e) { reject(new Error('Invalid JSON: ' + data.substring(0, 200))); }
       });
     });
-    req.on('error', reject);
+    req.on('error', (err) => {
+      if (isDevStatus) console.log(`[jiraFetch] Request error: ${err.message}`);
+      reject(err);
+    });
     if (body) req.write(typeof body === 'string' ? body : JSON.stringify(body));
     req.end();
   });
@@ -187,14 +201,26 @@ function extractOutwardKeys(issue) {
 // Fetch git dev-status for an issue (Jira Data Center)
 async function fetchDevStatus(issueId) {
   const appTypes = ['stash', 'githube', 'github', 'bitbucket'];
+  console.log(`[DevStatus] Fetching dev-status for issueId=${issueId}, trying appTypes: [${appTypes.join(', ')}]`);
   for (const appType of appTypes) {
+    const apiPath = `/rest/dev-status/1.0/issue/detail?issueId=${issueId}&applicationType=${appType}&dataType=repository`;
     try {
-      const data = await jiraFetch(
-        `/rest/dev-status/1.0/issue/detail?issueId=${issueId}&applicationType=${appType}&dataType=repository`
-      );
-      if (data?.detail && data.detail.length > 0) return data;
-    } catch (e) { /* try next */ }
+      console.log(`[DevStatus]   trying appType="${appType}" → ${apiPath}`);
+      const data = await jiraFetch(apiPath);
+      console.log(`[DevStatus]   appType="${appType}" response: ${JSON.stringify(data).substring(0, 300)}`);
+      if (data?.detail && data.detail.length > 0) {
+        const repoCount = data.detail.reduce((sum, d) => sum + (d.repositories || []).length, 0);
+        const commitCount = data.detail.reduce((sum, d) =>
+          sum + (d.repositories || []).reduce((s, r) => s + (r.commits || []).length, 0), 0);
+        console.log(`[DevStatus]   ✓ Found data: ${repoCount} repos, ${commitCount} commits`);
+        return data;
+      }
+      console.log(`[DevStatus]   appType="${appType}" returned empty detail`);
+    } catch (e) {
+      console.log(`[DevStatus]   appType="${appType}" error: ${e.message}`);
+    }
   }
+  console.log(`[DevStatus]   ✗ No dev-status data found for issueId=${issueId}`);
   return null;
 }
 
@@ -396,13 +422,15 @@ async function computeSnapshot(baseJql) {
 
                   // Fetch git dev-status for leaf issue
                   try {
+                    console.log(`[Snapshot] Fetching dev-status for leaf ${child.key} (id=${child.id || childFull.id})`);
                     const devStatus = await fetchDevStatus(child.id || childFull.id);
                     const commitDates = extractCommitDates(devStatus);
+                    console.log(`[Snapshot] ${child.key}: ${commitDates.size} commit dates found`);
                     const childCommits = buildDailyCommits(commitDates, days);
                     dailyCommitResults[child.key] = childCommits;
                     childCommitMaps.push(childCommits);
                   } catch (e) {
-                    // dev-status not available, skip
+                    console.log(`[Snapshot] ${child.key}: dev-status error: ${e.message}`);
                   }
 
                   snapshotState.totalIssues++;
@@ -425,13 +453,15 @@ async function computeSnapshot(baseJql) {
                 epicDailyMaps.push(epicDaily);
 
                 try {
+                  console.log(`[Snapshot] Fetching dev-status for leaf epic/story ${epic.key} (id=${epic.id || epicIssue.id})`);
                   const devStatus = await fetchDevStatus(epic.id || epicIssue.id);
                   const commitDates = extractCommitDates(devStatus);
+                  console.log(`[Snapshot] ${epic.key}: ${commitDates.size} commit dates found`);
                   const epicCommits = buildDailyCommits(commitDates, days);
                   dailyCommitResults[epic.key] = epicCommits;
                   epicCommitMaps.push(epicCommits);
                 } catch (e) {
-                  // dev-status not available, skip
+                  console.log(`[Snapshot] ${epic.key}: dev-status error: ${e.message}`);
                 }
               }
               snapshotState.totalIssues++;
