@@ -17,8 +17,5 @@
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
-  },
-  "dependencies": {
-    "exceljs": "^4.4.0"
   }
 }

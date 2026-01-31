@@ -3,7 +3,7 @@ const https = require('https');
 const url = require('url');
 const fs = require('fs');
 const path = require('path');
-const ExcelJS = require('exceljs');
+const ExcelJS = require('./vendor/exceljs.bundle.js');
 
 const { handleMockRequest } = require('./mock-data');
 
