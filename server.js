@@ -202,25 +202,42 @@ function extractOutwardKeys(issue) {
 async function fetchDevStatus(issueId) {
   const appTypes = ['stash', 'githube', 'github', 'bitbucket'];
   console.log(`[DevStatus] Fetching dev-status for issueId=${issueId}, trying appTypes: [${appTypes.join(', ')}]`);
+  let bestResult = null;
   for (const appType of appTypes) {
     const apiPath = `/rest/dev-status/1.0/issue/detail?issueId=${issueId}&applicationType=${appType}&dataType=repository`;
     try {
-      console.log(`[DevStatus]   trying appType="${appType}" → ${apiPath}`);
+      console.log(`[DevStatus]   trying appType="${appType}"`);
       const data = await jiraFetch(apiPath);
-      console.log(`[DevStatus]   appType="${appType}" response: ${JSON.stringify(data).substring(0, 300)}`);
-      if (data?.detail && data.detail.length > 0) {
-        const repoCount = data.detail.reduce((sum, d) => sum + (d.repositories || []).length, 0);
-        const commitCount = data.detail.reduce((sum, d) =>
-          sum + (d.repositories || []).reduce((s, r) => s + (r.commits || []).length, 0), 0);
-        console.log(`[DevStatus]   ✓ Found data: ${repoCount} repos, ${commitCount} commits`);
-        return data;
+
+      if (!data?.detail || data.detail.length === 0) {
+        console.log(`[DevStatus]   appType="${appType}" — empty detail`);
+        continue;
       }
-      console.log(`[DevStatus]   appType="${appType}" returned empty detail`);
+
+      // Check each detail entry for errors vs real data
+      for (const entry of data.detail) {
+        const instanceName = entry.instance?.name || entry._instance?.name || 'unknown';
+        const instanceType = entry.instance?.type || entry._instance?.typeName || 'unknown';
+
+        if (entry.error) {
+          console.log(`[DevStatus]   appType="${appType}" instance="${instanceName}" (${instanceType}): ERROR "${entry.error}"`);
+          continue;
+        }
+
+        const repos = entry.repositories || [];
+        const commitCount = repos.reduce((s, r) => s + (r.commits || []).length, 0);
+        console.log(`[DevStatus]   appType="${appType}" instance="${instanceName}" (${instanceType}): ${repos.length} repos, ${commitCount} commits`);
+
+        if (commitCount > 0) {
+          console.log(`[DevStatus]   ✓ Found commits!`);
+          return data;
+        }
+      }
     } catch (e) {
       console.log(`[DevStatus]   appType="${appType}" error: ${e.message}`);
     }
   }
-  console.log(`[DevStatus]   ✗ No dev-status data found for issueId=${issueId}`);
+  console.log(`[DevStatus]   ✗ No commits found for issueId=${issueId}`);
   return null;
 }
 
