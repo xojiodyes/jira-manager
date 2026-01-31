@@ -41,532 +41,694 @@
     "2026-01-10": {},
     "2026-01-11": {
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-12": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-10": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       }
     },
     "2026-01-12": {
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       },
       "PROJ-12": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       },
       "PROJ-10": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       }
     },
     "2026-01-13": {
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       },
       "PROJ-12": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       },
       "PROJ-10": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       }
     },
     "2026-01-14": {
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       },
       "PROJ-12": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       },
       "PROJ-10": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       }
     },
     "2026-01-15": {
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-12": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-10": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       }
     },
     "2026-01-16": {
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       },
       "PROJ-12": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       },
       "PROJ-10": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       }
     },
     "2026-01-17": {
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       },
       "PROJ-12": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       },
       "PROJ-10": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       }
     },
     "2026-01-18": {
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-12": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-10": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       }
     },
     "2026-01-19": {
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-12": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-10": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       }
     },
     "2026-01-20": {
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-12": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-10": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       }
     },
     "2026-01-21": {
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-12": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-4": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-13": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-10": {
-        "progress": 5
+        "progress": 5,
+        "commits": 1
       }
     },
     "2026-01-22": {
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-12": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-4": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-13": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-10": {
-        "progress": 5
+        "progress": 5,
+        "commits": 1
       }
     },
     "2026-01-23": {
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-12": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-4": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-13": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-10": {
-        "progress": 5
+        "progress": 5,
+        "commits": 1
       }
     },
     "2026-01-24": {
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       },
       "PROJ-12": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       },
       "PROJ-3": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-4": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-13": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-10": {
-        "progress": 5
+        "progress": 5,
+        "commits": 0
       }
     },
     "2026-01-25": {
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-12": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-3": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-4": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-13": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-10": {
-        "progress": 5
+        "progress": 5,
+        "commits": 1
       }
     },
     "2026-01-26": {
       "PROJ-1": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-12": {
-        "progress": 15
+        "progress": 15,
+        "commits": 1
       },
       "PROJ-3": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-4": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-13": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-10": {
-        "progress": 8
+        "progress": 8,
+        "commits": 1
       }
     },
     "2026-01-27": {
       "PROJ-1": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 1
       },
       "PROJ-12": {
-        "progress": 15
+        "progress": 15,
+        "commits": 1
       },
       "PROJ-3": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-4": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-13": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-10": {
-        "progress": 8
+        "progress": 8,
+        "commits": 1
       },
       "DEMO-1": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-14": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-11": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       }
     },
     "2026-01-28": {
       "PROJ-1": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-2": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       },
       "PROJ-12": {
-        "progress": 17
+        "progress": 17,
+        "commits": 0
       },
       "PROJ-3": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-4": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-13": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-10": {
-        "progress": 9
+        "progress": 9,
+        "commits": 0
       },
       "DEMO-1": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-14": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-11": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       }
     },
     "2026-01-29": {
       "PROJ-1": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-2": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       },
       "PROJ-12": {
-        "progress": 17
+        "progress": 17,
+        "commits": 0
       },
       "PROJ-3": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-4": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-13": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-10": {
-        "progress": 9
+        "progress": 9,
+        "commits": 0
       },
       "DEMO-1": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-14": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-11": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       }
     },
     "2026-01-30": {
       "PROJ-1": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-2": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       },
       "PROJ-12": {
-        "progress": 17
+        "progress": 17,
+        "commits": 1
       },
       "PROJ-3": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-4": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-13": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-10": {
-        "progress": 9
+        "progress": 9,
+        "commits": 1
       },
       "DEMO-1": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "DEMO-3": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-14": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-11": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       }
     },
     "2026-01-31": {
       "PROJ-1": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-2": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-21": {
-        "progress": 20
+        "progress": 20,
+        "commits": 0
       },
       "PROJ-22": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-20": {
-        "progress": 10
+        "progress": 10,
+        "commits": 0
       },
       "PROJ-12": {
-        "progress": 17
+        "progress": 17,
+        "commits": 1
       },
       "PROJ-3": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-4": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-13": {
-        "progress": 0
+        "progress": 0,
+        "commits": 0
       },
       "PROJ-10": {
-        "progress": 9
+        "progress": 9,
+        "commits": 1
       },
       "DEMO-1": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "DEMO-3": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-14": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       },
       "PROJ-11": {
-        "progress": 20
+        "progress": 20,
+        "commits": 1
       }
     }
   },
-  "lastRun": "2026-01-31T11:19:12.279Z"
+  "lastRun": "2026-01-31T12:08:28.411Z"
 }

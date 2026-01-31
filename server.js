@@ -184,6 +184,57 @@ function extractOutwardKeys(issue) {
   return keys;
 }
 
+// Fetch git dev-status for an issue (Jira Data Center)
+async function fetchDevStatus(issueId) {
+  const appTypes = ['stash', 'githube', 'github', 'bitbucket'];
+  for (const appType of appTypes) {
+    try {
+      const data = await jiraFetch(
+        `/rest/dev-status/1.0/issue/detail?issueId=${issueId}&applicationType=${appType}&dataType=repository`
+      );
+      if (data?.detail && data.detail.length > 0) return data;
+    } catch (e) { /* try next */ }
+  }
+  return null;
+}
+
+// Extract unique commit dates from dev-status response
+function extractCommitDates(devStatusData) {
+  const dates = new Set();
+  if (!devStatusData?.detail) return dates;
+  for (const detail of devStatusData.detail) {
+    for (const repo of (detail.repositories || [])) {
+      for (const commit of (repo.commits || [])) {
+        const ts = commit.authorTimestamp || commit.timestamp || '';
+        if (ts) {
+          const dateStr = new Date(ts).toISOString().slice(0, 10);
+          dates.add(dateStr);
+        }
+      }
+    }
+  }
+  return dates;
+}
+
+// Build daily commit activity map for an issue
+function buildDailyCommits(commitDates, days) {
+  const result = {};
+  for (const day of days) {
+    result[day] = commitDates.has(day) ? 1 : 0;
+  }
+  return result;
+}
+
+// Aggregate daily commits from children (max: if any child had commits, parent shows 1)
+function aggregateDailyCommits(childCommitMaps, days) {
+  const result = {};
+  for (const day of days) {
+    const hasCommit = childCommitMaps.some(m => m[day] === 1);
+    result[day] = hasCommit ? 1 : 0;
+  }
+  return result;
+}
+
 // Build array of last N dates as YYYY-MM-DD strings
 function getLast60Days() {
   const days = [];
@@ -277,6 +328,8 @@ async function computeSnapshot(baseJql) {
   const days = getLast60Days();
   // dailyResults[issueKey] = { "YYYY-MM-DD": progress, ... }
   const dailyResults = {};
+  // dailyCommitResults[issueKey] = { "YYYY-MM-DD": 0|1, ... }
+  const dailyCommitResults = {};
 
   try {
     snapshotState.phase = 'themes';
@@ -299,6 +352,7 @@ async function computeSnapshot(baseJql) {
       const themeIssue = await jiraGetIssue(theme.key);
       const milestoneLinkedKeys = extractLinkedKeys(themeIssue);
       const milestoneDailyMaps = [];
+      const milestoneCommitMaps = [];
 
       if (milestoneLinkedKeys.length > 0) {
         const msJql = `key in (${milestoneLinkedKeys.join(',')}) AND labels = milestone ORDER BY updated DESC`;
@@ -312,6 +366,7 @@ async function computeSnapshot(baseJql) {
           const msIssue = await jiraGetIssue(milestone.key);
           const epicLinkedKeys = extractLinkedKeys(msIssue);
           const epicDailyMaps = [];
+          const epicCommitMaps = [];
 
           if (epicLinkedKeys.length > 0) {
             const epJql = `key in (${epicLinkedKeys.join(',')}) AND (labels is EMPTY OR (labels != theme AND labels != milestone)) ORDER BY updated DESC`;
@@ -331,23 +386,53 @@ async function computeSnapshot(baseJql) {
                 const children = chData.issues || [];
                 const childDailyMaps = [];
 
+                const childCommitMaps = [];
                 for (const child of children) {
                   // Get issue with changelog for backfill
                   const childFull = await jiraGetIssue(child.key, true);
                   const childDaily = buildDailyProgress(childFull, days);
                   dailyResults[child.key] = childDaily;
                   childDailyMaps.push(childDaily);
+
+                  // Fetch git dev-status for leaf issue
+                  try {
+                    const devStatus = await fetchDevStatus(child.id || childFull.id);
+                    const commitDates = extractCommitDates(devStatus);
+                    const childCommits = buildDailyCommits(commitDates, days);
+                    dailyCommitResults[child.key] = childCommits;
+                    childCommitMaps.push(childCommits);
+                  } catch (e) {
+                    // dev-status not available, skip
+                  }
+
                   snapshotState.totalIssues++;
                 }
 
                 const epicDaily = averageDailyProgress(childDailyMaps, days);
                 dailyResults[epic.key] = epicDaily;
                 epicDailyMaps.push(epicDaily);
+
+                // Aggregate commits for epic
+                if (childCommitMaps.length > 0) {
+                  const epicCommits = aggregateDailyCommits(childCommitMaps, days);
+                  dailyCommitResults[epic.key] = epicCommits;
+                  epicCommitMaps.push(epicCommits);
+                }
               } else {
-                // Leaf story/task
+                // Leaf story/task — fetch dev-status directly
                 const epicDaily = buildDailyProgress(epicIssue, days);
                 dailyResults[epic.key] = epicDaily;
                 epicDailyMaps.push(epicDaily);
+
+                try {
+                  const devStatus = await fetchDevStatus(epic.id || epicIssue.id);
+                  const commitDates = extractCommitDates(devStatus);
+                  const epicCommits = buildDailyCommits(commitDates, days);
+                  dailyCommitResults[epic.key] = epicCommits;
+                  epicCommitMaps.push(epicCommits);
+                } catch (e) {
+                  // dev-status not available, skip
+                }
               }
               snapshotState.totalIssues++;
             }
@@ -356,12 +441,26 @@ async function computeSnapshot(baseJql) {
           const msDaily = averageDailyProgress(epicDailyMaps, days);
           dailyResults[milestone.key] = msDaily;
           milestoneDailyMaps.push(msDaily);
+
+          // Aggregate commits for milestone
+          if (epicCommitMaps.length > 0) {
+            const msCommits = aggregateDailyCommits(epicCommitMaps, days);
+            dailyCommitResults[milestone.key] = msCommits;
+            milestoneCommitMaps.push(msCommits);
+          }
+
           snapshotState.totalIssues++;
         }
       }
 
       const themeDaily = averageDailyProgress(milestoneDailyMaps, days);
       dailyResults[theme.key] = themeDaily;
+
+      // Aggregate commits for theme
+      if (milestoneCommitMaps.length > 0) {
+        dailyCommitResults[theme.key] = aggregateDailyCommits(milestoneCommitMaps, days);
+      }
+
       snapshotState.totalIssues++;
     }
 
@@ -370,7 +469,12 @@ async function computeSnapshot(baseJql) {
       if (!PROGRESS_DATA.snapshots[day]) PROGRESS_DATA.snapshots[day] = {};
       for (const [key, dailyMap] of Object.entries(dailyResults)) {
         if (dailyMap[day] !== undefined) {
-          PROGRESS_DATA.snapshots[day][key] = { progress: dailyMap[day] };
+          const entry = { progress: dailyMap[day] };
+          // Add commits if available
+          if (dailyCommitResults[key] && dailyCommitResults[key][day] !== undefined) {
+            entry.commits = dailyCommitResults[key][day];
+          }
+          PROGRESS_DATA.snapshots[day][key] = entry;
         }
       }
     }

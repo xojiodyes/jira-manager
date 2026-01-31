@@ -230,6 +230,68 @@ const UI = {
       <polyline points="${polyline}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
       <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="2" fill="${color}"/>
     </svg>`;
+  },
+  /**
+   * Render activity sparkline (binary bar chart for git commits)
+   * @param {Array<{date: string, commits: 0|1}>} dataPoints
+   * @param {number} width
+   * @param {number} height
+   * @returns {string} HTML string
+   */
+  _buildActivityTooltip(dataPoints) {
+    if (!dataPoints || dataPoints.length === 0) return '';
+    // Group by ISO week
+    const weeks = {};
+    for (const dp of dataPoints) {
+      const d = new Date(dp.date + 'T00:00:00');
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(d);
+      monday.setDate(diff);
+      const weekKey = monday.toISOString().slice(0, 10);
+      if (!weeks[weekKey]) weeks[weekKey] = 0;
+      if (dp.commits) weeks[weekKey]++;
+    }
+    const lines = [];
+    const weekKeys = Object.keys(weeks).sort();
+    for (const wk of weekKeys) {
+      const d = new Date(wk + 'T00:00:00');
+      const label = d.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+      lines.push(`${label}: ${weeks[wk]} day${weeks[wk] !== 1 ? 's' : ''}`);
+    }
+    return lines.join('\n');
+  },
+
+  renderActivitySparkline(dataPoints, width = 80, height = 20) {
+    if (!dataPoints || dataPoints.length === 0) {
+      return '<span class="sparkline-empty">--</span>';
+    }
+
+    // Check if there's any activity at all
+    const hasActivity = dataPoints.some(d => d.commits === 1);
+    if (!hasActivity) {
+      return '<span class="sparkline-empty">--</span>';
+    }
+
+    const pad = 2;
+    const barWidth = 1.5;
+    const gap = (width - pad * 2) / dataPoints.length;
+    const barHeight = height - pad * 2;
+
+    const tooltip = this._buildActivityTooltip(dataPoints);
+
+    let bars = '';
+    for (let i = 0; i < dataPoints.length; i++) {
+      if (dataPoints[i].commits === 1) {
+        const x = pad + i * gap;
+        bars += `<rect x="${x.toFixed(1)}" y="${pad}" width="${barWidth}" height="${barHeight}" fill="#0052cc" opacity="0.7" rx="0.5"/>`;
+      }
+    }
+
+    return `<svg class="sparkline activity-sparkline" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <title>${tooltip}</title>
+      ${bars}
+    </svg>`;
   }
 };
 

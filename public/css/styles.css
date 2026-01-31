@@ -521,6 +521,10 @@ a:hover {
   color: var(--color-text-muted, #97a0af);
   font-size: 11px;
 }
+.activity-sparkline {
+  display: inline-block;
+  vertical-align: middle;
+}
 
 /* Snapshot button */
 .snapshot-status {

@@ -697,6 +697,57 @@ function handleMockRequest(jiraPath, query, method, reqBody) {
     ] } };
   }
 
+  // /rest/dev-status/1.0/issue/detail — mock git commit activity
+  if (jiraPath === '/rest/dev-status/1.0/issue/detail') {
+    const params = new URLSearchParams(query ? query.replace('?', '') : '');
+    const issueId = params.get('issueId');
+    const issue = ISSUES.find(i => i.id === issueId);
+    if (!issue) {
+      return { status: 200, body: { detail: [] } };
+    }
+
+    // Generate random commits for non-"To Do" issues
+    const statusName = issue.fields.status?.name || 'To Do';
+    if (statusName === 'To Do') {
+      return { status: 200, body: { detail: [{ repositories: [] }] } };
+    }
+
+    const commits = [];
+    const now = new Date();
+    // Generate random commits over last 60 days
+    // More active issues (In Progress, In Review) get more commits
+    const activityLevel = statusName === 'Done' ? 0.15 : (statusName === 'In Review' ? 0.3 : 0.4);
+    for (let i = 59; i >= 0; i--) {
+      if (Math.random() < activityLevel) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        // Add 1-3 commits on active days
+        const numCommits = Math.floor(Math.random() * 3) + 1;
+        for (let j = 0; j < numCommits; j++) {
+          d.setHours(9 + Math.floor(Math.random() * 10), Math.floor(Math.random() * 60));
+          commits.push({
+            id: `mock-commit-${issueId}-${i}-${j}`,
+            displayId: `abc${i}${j}`,
+            authorTimestamp: d.toISOString(),
+            message: `${issue.key}: mock commit ${i}-${j}`
+          });
+        }
+      }
+    }
+
+    return {
+      status: 200,
+      body: {
+        detail: [{
+          repositories: [{
+            name: 'mock-repo',
+            commits
+          }]
+        }]
+      }
+    };
+  }
+
   return { status: 404, body: { errorMessages: ['Unknown endpoint'] } };
 }
 

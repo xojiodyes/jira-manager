@@ -26,6 +26,8 @@ class App {
 
     // Progress history for sparklines
     this.progressHistory = {}; // { "KEY": [{ date, progress }, ...] }
+    // Commit history for git activity sparklines
+    this.commitHistory = {}; // { "KEY": [{ date, commits: 0|1 }, ...] }
 
     this.init();
   }
@@ -67,7 +69,8 @@ class App {
   }
 
   _transformSnapshots(snapshots) {
-    const result = {};
+    const progressResult = {};
+    const commitResult = {};
     const dates = Object.keys(snapshots).sort();
     // Keep last 60 days
     const cutoff = new Date();
@@ -78,11 +81,17 @@ class App {
       if (date < cutoffStr) continue;
       const issues = snapshots[date];
       for (const [key, val] of Object.entries(issues)) {
-        if (!result[key]) result[key] = [];
-        result[key].push({ date, progress: val.progress });
+        if (!progressResult[key]) progressResult[key] = [];
+        progressResult[key].push({ date, progress: val.progress });
+
+        if (val.commits !== undefined) {
+          if (!commitResult[key]) commitResult[key] = [];
+          commitResult[key].push({ date, commits: val.commits });
+        }
       }
     }
-    return result;
+    this.commitHistory = commitResult;
+    return progressResult;
   }
 
   async startSnapshot() {
@@ -762,6 +771,7 @@ class App {
         <span class="hlh-field">Confid.</span>
         <span class="hlh-count">Items</span>
         <span class="hlh-sparkline">Trend</span>
+        <span class="hlh-sparkline">Git</span>
         <span class="hlh-link"></span>
       </div>`;
     for (const issue of issues) {
@@ -787,6 +797,7 @@ class App {
             <span class="editable-field editable-confidence" data-key="${issue.key}" data-field="confidence" title="Confidence (0-100)">${confidence !== null ? confidence + '%' : '—'}</span>
             <span class="hierarchy-items-count" title="Child items">${childCount}</span>
             <span class="hierarchy-sparkline">${UI.renderSparkline(this.progressHistory[issue.key] || [])}</span>
+            <span class="hierarchy-sparkline">${UI.renderActivitySparkline(this.commitHistory[issue.key] || [])}</span>
             <a href="${jiraAPI.getIssueUrl(issue.key)}" target="_blank" class="hierarchy-jira-link" title="Open in Jira" onclick="event.stopPropagation()">↗</a>
           </div>
         </div>
@@ -1080,6 +1091,7 @@ class App {
     if (showItemsCount) colgroup += '<col style="width: 50px;">';  // Items
     if (showProgress) colgroup += '<col style="width: 80px;">';   // Progress
     colgroup += '<col style="width: 84px;">';   // Trend
+    colgroup += '<col style="width: 84px;">';   // Git
     colgroup += '<col style="width: 140px;">';  // Assignee
     colgroup += '<col style="width: 36px;">';   // Link
     colgroup += '</colgroup>';
@@ -1091,7 +1103,7 @@ class App {
     if (showPriority) thead += '<th>Priority</th>';
     if (showItemsCount) thead += '<th>Items</th>';
     if (showProgress) thead += '<th>Progress</th>';
-    thead += '<th>Trend</th><th>Assignee</th><th></th></tr>';
+    thead += '<th>Trend</th><th>Git</th><th>Assignee</th><th></th></tr>';
 
     let html = `
       <table class="issues-table issues-table-fixed">
@@ -1162,6 +1174,7 @@ class App {
       }
 
       html += `<td class="sparkline-cell">${UI.renderSparkline(this.progressHistory[issue.key] || [])}</td>`;
+      html += `<td class="sparkline-cell">${UI.renderActivitySparkline(this.commitHistory[issue.key] || [])}</td>`;
 
       html += `
           <td>
