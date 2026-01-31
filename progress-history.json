@@ -568,54 +568,54 @@
       }
     }
   },
-  "lastRun": "2026-01-31T17:01:49.542Z",
+  "lastRun": "2026-01-31T19:05:40.462Z",
   "gitActivity": {
     "PROJ-1": {
-      "lastActivity": "2026-01-30",
+      "lastActivity": "2026-01-26",
       "prCount": 1,
       "prMerged": 0,
       "prOpen": 1,
-      "repoCount": 3,
+      "repoCount": 2,
       "commitCount": 0
     },
     "PROJ-2": {
-      "lastActivity": "2026-01-19",
+      "lastActivity": "2026-01-20",
       "prCount": 2,
       "prMerged": 1,
       "prOpen": 1,
-      "repoCount": 1,
+      "repoCount": 2,
       "commitCount": 0
     },
     "PROJ-21": {
-      "lastActivity": "2026-01-25",
-      "prCount": 1,
+      "lastActivity": "2026-01-28",
+      "prCount": 0,
       "prMerged": 0,
-      "prOpen": 1,
-      "repoCount": 3,
+      "prOpen": 0,
+      "repoCount": 1,
       "commitCount": 0
     },
     "PROJ-20": {
-      "lastActivity": "2026-01-25",
-      "prCount": 1,
+      "lastActivity": "2026-01-28",
+      "prCount": 0,
       "prMerged": 0,
-      "prOpen": 1,
-      "repoCount": 3,
+      "prOpen": 0,
+      "repoCount": 1,
       "commitCount": 0
     },
     "PROJ-12": {
-      "lastActivity": "2026-01-30",
-      "prCount": 4,
+      "lastActivity": "2026-01-28",
+      "prCount": 3,
       "prMerged": 1,
-      "prOpen": 3,
-      "repoCount": 7,
+      "prOpen": 2,
+      "repoCount": 5,
       "commitCount": 0
     },
     "PROJ-10": {
-      "lastActivity": "2026-01-30",
-      "prCount": 4,
+      "lastActivity": "2026-01-28",
+      "prCount": 3,
       "prMerged": 1,
-      "prOpen": 3,
-      "repoCount": 7,
+      "prOpen": 2,
+      "repoCount": 5,
       "commitCount": 0
     },
     "DEMO-1": {
@@ -623,11 +623,11 @@
       "prCount": 1,
       "prMerged": 0,
       "prOpen": 1,
-      "repoCount": 2,
+      "repoCount": 3,
       "commitCount": 0
     },
     "DEMO-3": {
-      "lastActivity": "2026-01-26",
+      "lastActivity": "2026-01-31",
       "prCount": 0,
       "prMerged": 0,
       "prOpen": 0,
@@ -635,142 +635,134 @@
       "commitCount": 0
     },
     "PROJ-14": {
-      "lastActivity": "2026-01-27",
+      "lastActivity": "2026-01-31",
       "prCount": 1,
       "prMerged": 0,
       "prOpen": 1,
-      "repoCount": 4,
+      "repoCount": 5,
       "commitCount": 0
     },
     "PROJ-11": {
-      "lastActivity": "2026-01-27",
+      "lastActivity": "2026-01-31",
       "prCount": 1,
       "prMerged": 0,
       "prOpen": 1,
-      "repoCount": 4,
+      "repoCount": 5,
       "commitCount": 0
     }
   },
   "developers": {
-    "PROJ-1": [
-      {
-        "displayName": "Иван Петров",
-        "avatarUrl": ""
-      },
-      {
-        "displayName": "Анна Сидорова",
-        "avatarUrl": ""
-      }
-    ],
-    "PROJ-2": [
-      {
-        "displayName": "Сергей Козлов",
-        "avatarUrl": ""
-      }
-    ],
-    "PROJ-21": [
-      {
-        "displayName": "Иван Петров",
-        "avatarUrl": ""
-      }
-    ],
-    "PROJ-22": [
-      {
-        "displayName": "Анна Сидорова",
-        "avatarUrl": ""
-      }
-    ],
-    "PROJ-20": [
-      {
-        "displayName": "Иван Петров",
-        "avatarUrl": ""
-      },
-      {
-        "displayName": "Анна Сидорова",
-        "avatarUrl": ""
-      }
-    ],
-    "PROJ-12": [
-      {
-        "displayName": "Иван Петров",
-        "avatarUrl": ""
-      },
-      {
-        "displayName": "Анна Сидорова",
-        "avatarUrl": ""
-      },
-      {
-        "displayName": "Сергей Козлов",
-        "avatarUrl": ""
-      }
-    ],
-    "PROJ-3": [
-      {
-        "displayName": "Анна Сидорова",
-        "avatarUrl": ""
-      }
-    ],
-    "PROJ-4": [
-      {
-        "displayName": "Иван Петров",
-        "avatarUrl": ""
-      }
-    ],
-    "PROJ-13": [
-      {
-        "displayName": "Анна Сидорова",
-        "avatarUrl": ""
-      },
-      {
-        "displayName": "Иван Петров",
-        "avatarUrl": ""
-      }
-    ],
-    "PROJ-10": [
-      {
-        "displayName": "Иван Петров",
-        "avatarUrl": ""
-      },
-      {
-        "displayName": "Анна Сидорова",
-        "avatarUrl": ""
-      },
-      {
-        "displayName": "Сергей Козлов",
-        "avatarUrl": ""
-      }
-    ],
-    "DEMO-1": [
-      {
-        "displayName": "Анна Сидорова",
-        "avatarUrl": ""
-      }
-    ],
-    "DEMO-3": [
-      {
-        "displayName": "Иван Петров",
-        "avatarUrl": ""
-      }
-    ],
-    "PROJ-14": [
-      {
-        "displayName": "Анна Сидорова",
-        "avatarUrl": ""
-      },
-      {
-        "displayName": "Иван Петров",
-        "avatarUrl": ""
-      }
-    ],
-    "PROJ-11": [
-      {
-        "displayName": "Анна Сидорова",
-        "avatarUrl": ""
-      },
-      {
-        "displayName": "Иван Петров",
-        "avatarUrl": ""
-      }
-    ]
+    "PROJ-1": {
+      "Dev": [
+        {
+          "displayName": "Иван Петров",
+          "avatarUrl": ""
+        }
+      ]
+    },
+    "PROJ-2": {
+      "Review": [
+        {
+          "displayName": "Иван Петров",
+          "avatarUrl": ""
+        },
+        {
+          "displayName": "Сергей Козлов",
+          "avatarUrl": ""
+        }
+      ]
+    },
+    "PROJ-21": {
+      "Dev": [
+        {
+          "displayName": "Иван Петров",
+          "avatarUrl": ""
+        }
+      ]
+    },
+    "PROJ-20": {
+      "Dev": [
+        {
+          "displayName": "Иван Петров",
+          "avatarUrl": ""
+        }
+      ]
+    },
+    "PROJ-12": {
+      "Dev": [
+        {
+          "displayName": "Иван Петров",
+          "avatarUrl": ""
+        }
+      ],
+      "Review": [
+        {
+          "displayName": "Иван Петров",
+          "avatarUrl": ""
+        },
+        {
+          "displayName": "Сергей Козлов",
+          "avatarUrl": ""
+        }
+      ]
+    },
+    "PROJ-10": {
+      "Dev": [
+        {
+          "displayName": "Иван Петров",
+          "avatarUrl": ""
+        }
+      ],
+      "Review": [
+        {
+          "displayName": "Иван Петров",
+          "avatarUrl": ""
+        },
+        {
+          "displayName": "Сергей Козлов",
+          "avatarUrl": ""
+        }
+      ]
+    },
+    "DEMO-1": {
+      "Dev": [
+        {
+          "displayName": "Анна Сидорова",
+          "avatarUrl": ""
+        }
+      ]
+    },
+    "DEMO-3": {
+      "Dev": [
+        {
+          "displayName": "Иван Петров",
+          "avatarUrl": ""
+        }
+      ]
+    },
+    "PROJ-14": {
+      "Dev": [
+        {
+          "displayName": "Анна Сидорова",
+          "avatarUrl": ""
+        },
+        {
+          "displayName": "Иван Петров",
+          "avatarUrl": ""
+        }
+      ]
+    },
+    "PROJ-11": {
+      "Dev": [
+        {
+          "displayName": "Анна Сидорова",
+          "avatarUrl": ""
+        },
+        {
+          "displayName": "Иван Петров",
+          "avatarUrl": ""
+        }
+      ]
+    }
   }
 }

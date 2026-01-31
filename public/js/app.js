@@ -28,8 +28,8 @@ class App {
     this.progressHistory = {}; // { "KEY": [{ date, progress }, ...] }
     // Git activity data per issue
     this.gitActivity = {}; // { "KEY": { lastActivity, prCount, prMerged, prOpen, repoCount, commitCount } }
-    // Developers per issue (last 30 days)
-    this.developers = {}; // { "KEY": [{ displayName, avatarUrl }] }
+    // Developers per issue (last 30 days), grouped by role
+    this.developers = {}; // { "KEY": { Dev: [...], Review: [...], QA: [...] } }
 
     this.init();
   }
@@ -588,19 +588,28 @@ class App {
       </div>
 
       ${(() => {
-        const devs = this.developers[issue.key] || [];
-        if (devs.length === 0) return '';
+        const devsByRole = this.developers[issue.key] || {};
+        const roles = Object.keys(devsByRole);
+        if (roles.length === 0) return '';
+        const totalDevs = new Set(roles.flatMap(r => devsByRole[r].map(d => d.displayName))).size;
+        const roleLabels = { Dev: 'Development', QA: 'QA / Testing' };
+        const roleOrder = ['Dev', 'QA'];
         return `
           <div class="issue-detail-section">
-            <h4>Developers — last 30 days (${devs.length})</h4>
-            <div class="developers-list">
-              ${devs.map(d => `
-                <span class="developer-chip">
-                  ${d.avatarUrl ? `<img src="${d.avatarUrl}" class="developer-avatar" alt="">` : ''}
-                  ${UI.escapeHtml(d.displayName)}
-                </span>
-              `).join('')}
-            </div>
+            <h4>Team — last 30 days (${totalDevs})</h4>
+            ${roleOrder.filter(r => devsByRole[r]?.length > 0).map(role => `
+              <div class="developers-role-group">
+                <div class="developers-role-label">${roleLabels[role] || role}</div>
+                <div class="developers-list">
+                  ${devsByRole[role].map(d => `
+                    <span class="developer-chip">
+                      ${d.avatarUrl ? `<img src="${d.avatarUrl}" class="developer-avatar" alt="">` : ''}
+                      ${UI.escapeHtml(d.displayName)}
+                    </span>
+                  `).join('')}
+                </div>
+              </div>
+            `).join('')}
           </div>`;
       })()}
 

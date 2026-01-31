@@ -527,22 +527,48 @@ function generateMockChangelog(issue) {
   const stepDays = Math.floor(daysBack / currentIdx);
 
   const userKeys = Object.keys(USERS);
+  // Assign different people at different phases
+  const phaseAssignees = {
+    'In Progress': USERS[userKeys[Math.floor(Math.random() * userKeys.length)]],
+    'In Review': USERS[userKeys[Math.floor(Math.random() * userKeys.length)]],
+    'Done': null
+  };
+  let prevAssignee = null;
+
   for (let i = 0; i < currentIdx; i++) {
     const transDate = new Date(now);
     transDate.setDate(transDate.getDate() - (daysBack - i * stepDays));
     const randomUser = USERS[userKeys[Math.floor(Math.random() * userKeys.length)]];
+    const newStatus = statusFlow[i + 1];
+    const newAssignee = phaseAssignees[newStatus] || randomUser;
+
+    const items = [{
+      field: 'status',
+      fieldtype: 'jira',
+      from: String(i),
+      fromString: statusFlow[i],
+      to: String(i + 1),
+      toString: newStatus
+    }];
+
+    // Add assignee change when transitioning to a work phase
+    if (newStatus !== 'Done' && newAssignee) {
+      items.push({
+        field: 'assignee',
+        fieldtype: 'jira',
+        from: prevAssignee?.accountId || null,
+        fromString: prevAssignee?.displayName || null,
+        to: newAssignee.accountId,
+        toString: newAssignee.displayName
+      });
+      prevAssignee = newAssignee;
+    }
+
     histories.push({
       id: String(10000 + Math.random() * 10000 | 0),
       author: randomUser,
       created: transDate.toISOString(),
-      items: [{
-        field: 'status',
-        fieldtype: 'jira',
-        from: String(i),
-        fromString: statusFlow[i],
-        to: String(i + 1),
-        toString: statusFlow[i + 1]
-      }]
+      items
     });
   }
 

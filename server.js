@@ -343,59 +343,113 @@ function aggregateGitActivity(childGitData) {
   return result.lastActivity ? result : null;
 }
 
-// Extract unique developers who worked on an issue in the last 30 days
-// Sources: assignee, changelog authors, comment authors
+// Map Jira status to role
+function statusToRole(statusName) {
+  if (!statusName) return null;
+  const s = statusName.toLowerCase();
+  if (s === 'in progress' || s === 'in development' || s === 'development') return 'Dev';
+  if (s === 'code review' || s === 'in review' || s === 'review') return 'Dev';
+  if (s === 'qa' || s === 'in qa' || s === 'testing' || s === 'in testing' || s === 'test') return 'QA';
+  return null;
+}
+
+// Extract developers with roles from changelog (last 30 days)
+// Returns { Dev: [{ displayName, avatarUrl }], QA: [...] }
 function extractDevelopers(issue) {
-  const devMap = {}; // key: displayName, value: { displayName, avatarUrl }
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 30);
   const cutoffStr = cutoff.toISOString();
 
-  // 1. Current assignee (always included)
-  const assignee = issue.fields?.assignee;
-  if (assignee?.displayName) {
-    devMap[assignee.displayName] = {
-      displayName: assignee.displayName,
-      avatarUrl: assignee.avatarUrls?.['24x24'] || ''
-    };
-  }
-
-  // 2. Changelog authors (last 30 days)
   const histories = issue.changelog?.histories || [];
-  for (const h of histories) {
-    if (h.created && h.created >= cutoffStr && h.author?.displayName) {
-      devMap[h.author.displayName] = {
-        displayName: h.author.displayName,
-        avatarUrl: h.author.avatarUrls?.['24x24'] || ''
-      };
+  // Sort by created ascending
+  const sorted = [...histories].sort((a, b) => (a.created || '').localeCompare(b.created || ''));
+
+  // Build timeline of status changes and assignee changes
+  let currentStatus = null;
+  // Find initial status: look at first status change's fromString
+  for (const h of sorted) {
+    for (const item of (h.items || [])) {
+      if (item.field === 'status') {
+        currentStatus = item.fromString;
+        break;
+      }
     }
+    if (currentStatus) break;
+  }
+  // If no status changes in changelog, use current status
+  if (!currentStatus) {
+    currentStatus = issue.fields?.status?.name || null;
   }
 
-  // 3. Comment authors (last 30 days)
-  const comments = issue.fields?.comment?.comments || [];
-  for (const c of comments) {
-    if (c.created && c.created >= cutoffStr && c.author?.displayName) {
-      devMap[c.author.displayName] = {
-        displayName: c.author.displayName,
-        avatarUrl: c.author.avatarUrls?.['24x24'] || ''
-      };
+  // roleMap: key = displayName, value = { displayName, avatarUrl, roles: Set }
+  const roleMap = {};
+
+  function addPerson(name, avatarUrl, role) {
+    if (!name || !role) return;
+    if (!roleMap[name]) {
+      roleMap[name] = { displayName: name, avatarUrl: avatarUrl || '', roles: new Set() };
     }
+    roleMap[name].roles.add(role);
   }
 
-  return Object.values(devMap);
-}
+  // Walk through changelog chronologically
+  for (const h of sorted) {
+    const inRange = h.created && h.created >= cutoffStr;
 
-// Aggregate developers from children: union of unique devs
-function aggregateDevelopers(childDevLists) {
-  const devMap = {};
-  for (const devList of childDevLists) {
-    for (const dev of devList) {
-      if (dev.displayName) {
-        devMap[dev.displayName] = dev;
+    for (const item of (h.items || [])) {
+      // Track status changes
+      if (item.field === 'status') {
+        currentStatus = item.toString;
+      }
+
+      // When assignee changes, the NEW assignee gets the role based on current status
+      if (item.field === 'assignee' && inRange && item.to) {
+        const role = statusToRole(currentStatus);
+        // We have toString = new assignee displayName
+        // But we don't have avatar from changelog item, try h.author as fallback
+        addPerson(item.toString, '', role);
       }
     }
   }
-  return Object.values(devMap);
+
+  // Current assignee gets role based on current issue status
+  const assignee = issue.fields?.assignee;
+  const curStatus = issue.fields?.status?.name;
+  if (assignee?.displayName) {
+    const role = statusToRole(curStatus);
+    addPerson(assignee.displayName, assignee.avatarUrls?.['24x24'] || '', role);
+  }
+
+  // Build result grouped by role
+  const result = {};
+  for (const person of Object.values(roleMap)) {
+    for (const role of person.roles) {
+      if (!result[role]) result[role] = [];
+      result[role].push({ displayName: person.displayName, avatarUrl: person.avatarUrl });
+    }
+  }
+
+  return result;
+}
+
+// Aggregate developers from children: union per role
+function aggregateDevelopers(childDevLists) {
+  const roleMap = {}; // role -> { name -> { displayName, avatarUrl } }
+  for (const devsByRole of childDevLists) {
+    for (const [role, devs] of Object.entries(devsByRole)) {
+      if (!roleMap[role]) roleMap[role] = {};
+      for (const dev of devs) {
+        if (dev.displayName) {
+          roleMap[role][dev.displayName] = dev;
+        }
+      }
+    }
+  }
+  const result = {};
+  for (const [role, map] of Object.entries(roleMap)) {
+    result[role] = Object.values(map);
+  }
+  return result;
 }
 
 // Build array of last N dates as YYYY-MM-DD strings
@@ -562,7 +616,7 @@ async function computeSnapshot(baseJql) {
 
                   // Extract developers for leaf issue
                   const devs = extractDevelopers(childFull);
-                  if (devs.length > 0) {
+                  if (Object.keys(devs).length > 0) {
                     devResults[child.key] = devs;
                     childDevLists.push(devs);
                   }
@@ -607,7 +661,7 @@ async function computeSnapshot(baseJql) {
 
                 // Extract developers for leaf epic
                 const devs = extractDevelopers(epicIssue);
-                if (devs.length > 0) devResults[epic.key] = devs;
+                if (Object.keys(devs).length > 0) devResults[epic.key] = devs;
 
                 try {
                   console.log(`[Snapshot] Fetching dev-status for leaf epic/story ${epic.key} (id=${epic.id || epicIssue.id})`);

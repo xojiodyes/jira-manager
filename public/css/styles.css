@@ -885,10 +885,23 @@ a:hover {
 }
 
 /* Developers list in issue detail */
+.developers-role-group {
+  margin-bottom: 10px;
+}
+.developers-role-group:last-child {
+  margin-bottom: 0;
+}
+.developers-role-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b778c;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
 .developers-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 .developer-chip {
   display: inline-flex;
