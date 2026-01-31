@@ -430,7 +430,13 @@ class App {
     // ESC/ArrowLeft to close modals + keyboard navigation
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        // Close git popup first if open
+        // Close trend popup first if open
+        if (document.querySelector('.trend-popup')) {
+          UI.hideTrendPopup();
+          e.preventDefault();
+          return;
+        }
+        // Close git popup if open
         if (document.querySelector('.git-popup')) {
           UI.hideGitPopup();
           e.preventDefault();
@@ -473,6 +479,38 @@ class App {
     }
 
     UI.showGitPopup(gitData, dotEl, issueKey, childrenGit);
+  }
+
+  _handleSparklineClick(sparklineEl) {
+    const issueKey = sparklineEl.dataset.issueKey;
+    const dataPoints = this.progressHistory[issueKey] || [];
+
+    // Collect children progress data
+    const childrenProgress = {};
+    const allIssues = this._getAllLoadedIssues();
+    const parentIssue = allIssues.find(i => i.key === issueKey);
+    if (parentIssue && parentIssue._childKeys) {
+      for (const ck of parentIssue._childKeys) {
+        if (this.progressHistory[ck]) {
+          childrenProgress[ck] = this.progressHistory[ck];
+        }
+      }
+    }
+
+    UI.showTrendPopup(dataPoints, sparklineEl, issueKey, childrenProgress);
+  }
+
+  _getDevQaInfo(issueKey) {
+    const devsByRole = this.developers[issueKey] || {};
+    const devNames = (devsByRole['Dev'] || []).map(d => d.displayName).filter(Boolean);
+    const qaNames = (devsByRole['QA'] || []).map(d => d.displayName).filter(Boolean);
+    const allNames = new Set([...devNames, ...qaNames]);
+    const count = allNames.size;
+    if (count === 0) return { count: 0, tooltip: '' };
+    const lines = [];
+    if (devNames.length > 0) lines.push('Dev: ' + devNames.join(', '));
+    if (qaNames.length > 0) lines.push('QA: ' + qaNames.join(', '));
+    return { count, tooltip: lines.join('\n') };
   }
 
   _getAllLoadedIssues() {
@@ -912,14 +950,13 @@ class App {
 
     let html = `<div class="hierarchy-list">
       <div class="hierarchy-list-header">
+        <span class="hlh-detail"></span>
         <span class="hlh-key">Key</span>
         <span class="hlh-summary">Summary</span>
-        <span class="hlh-field">Status</span>
-        <span class="hlh-field">Confid.</span>
         <span class="hlh-count">Items</span>
+        <span class="hlh-count">#D/Q</span>
         <span class="hlh-sparkline">Trend</span>
-        <span class="hlh-sparkline">Git</span>
-        <span class="hlh-link"></span>
+        <span class="hlh-git">Git</span>
       </div>`;
     for (const issue of issues) {
       const f = issue.fields;
@@ -932,20 +969,16 @@ class App {
         return true;
       }).length;
 
-      const status = this.getLocalField(issue.key, 'status');
-      const confidence = this.getLocalField(issue.key, 'confidence');
-
       html += `
         <div class="hierarchy-row" data-key="${issue.key}" data-level="${level}">
           <div class="hierarchy-row-main">
+            <span class="hierarchy-detail-btn" data-key="${issue.key}" title="View details">👁</span>
             <a href="${jiraAPI.getIssueUrl(issue.key)}" target="_blank" class="issue-key" onclick="event.stopPropagation()" title="Open in Jira">${issue.key}</a>
             <span class="hierarchy-summary">${UI.escapeHtml(f.summary)}</span>
-            <span class="editable-field editable-status" data-key="${issue.key}" data-field="status" title="Status (0-100)">${status !== null ? status + '%' : '—'}</span>
-            <span class="editable-field editable-confidence" data-key="${issue.key}" data-field="confidence" title="Confidence (0-100)">${confidence !== null ? confidence + '%' : '—'}</span>
             <span class="hierarchy-items-count" title="Child items">${childCount}</span>
-            <span class="hierarchy-sparkline">${UI.renderSparkline(this.progressHistory[issue.key] || [])}</span>
+            ${(() => { const dq = this._getDevQaInfo(issue.key); return `<span class="hierarchy-devqa-count" title="${UI.escapeHtml(dq.tooltip)}">${dq.count || ''}</span>`; })()}
+            <span class="hierarchy-sparkline">${UI.renderSparkline(this.progressHistory[issue.key] || [], issue.key)}</span>
             <span class="hierarchy-git-dot">${UI.renderGitDot(this.gitActivity[issue.key], issue.key)}</span>
-            <span class="hierarchy-detail-btn" data-key="${issue.key}" title="View details">👁</span>
           </div>
         </div>
       `;
@@ -956,16 +989,17 @@ class App {
     // Bind click handlers
     container.querySelectorAll('.hierarchy-row').forEach(row => {
       row.addEventListener('click', (e) => {
+        // If clicking on sparkline, show trend popup
+        const sparkline = e.target.closest('.sparkline-clickable');
+        if (sparkline && sparkline.dataset.issueKey) {
+          e.stopPropagation();
+          this._handleSparklineClick(sparkline);
+          return;
+        }
         // If clicking on git dot, show popup
         if (e.target.classList.contains('git-dot') && e.target.dataset.issueKey) {
           e.stopPropagation();
           this._handleGitDotClick(e.target);
-          return;
-        }
-        // If clicking on editable field, handle inline edit
-        if (e.target.classList.contains('editable-field')) {
-          e.stopPropagation();
-          this.startInlineEdit(e.target);
           return;
         }
         // If clicking on detail button (eye icon), open detail modal
@@ -1228,35 +1262,32 @@ class App {
 
     const showJiraStatus = context !== 'epicTasks' && context !== 'epicSubTasks';
     const showPriority = context !== 'epicTasks' && context !== 'epicSubTasks';
-    const showLocalFields = context !== 'epicSubTasks';
     const showProgress = context === 'epicSubTasks';
     const compactType = context === 'epicTasks' || context === 'epicSubTasks';
 
     let colgroup = '<colgroup>';
+    colgroup += '<col style="width: 36px;">';   // Detail (eye icon)
     colgroup += compactType ? '<col style="width: 32px;">' : '<col style="width: 90px;">';   // Type
     colgroup += '<col style="width: 130px;">';  // Key
     colgroup += '<col>';                         // Summary
     if (showJiraStatus) colgroup += '<col style="width: 120px;">'; // Jira Status
-    if (showLocalFields) colgroup += '<col style="width: 80px;">';   // Status %
-    if (showLocalFields) colgroup += '<col style="width: 80px;">';   // Confid. %
     if (showPriority) colgroup += '<col style="width: 100px;">';   // Priority
     const showItemsCount = context === 'epicTasks';
     if (showItemsCount) colgroup += '<col style="width: 50px;">';  // Items
+    if (showItemsCount) colgroup += '<col style="width: 50px;">';  // #D/Q
     if (showProgress) colgroup += '<col style="width: 80px;">';   // Progress
     colgroup += '<col style="width: 84px;">';   // Trend
     colgroup += '<col style="width: 36px;">';   // Git
     colgroup += '<col style="width: 140px;">';  // Assignee
-    colgroup += '<col style="width: 36px;">';   // Link
     colgroup += '</colgroup>';
 
-    let thead = compactType ? '<tr><th>T</th>' : '<tr><th>Type</th>';
+    let thead = compactType ? '<tr><th></th><th>T</th>' : '<tr><th></th><th>Type</th>';
     thead += '<th>Key</th><th>Summary</th>';
     if (showJiraStatus) thead += '<th>Jira Status</th>';
-    if (showLocalFields) thead += '<th>Status %</th><th>Confid. %</th>';
     if (showPriority) thead += '<th>Priority</th>';
-    if (showItemsCount) thead += '<th>Items</th>';
+    if (showItemsCount) thead += '<th>Items</th><th>#D/Q</th>';
     if (showProgress) thead += '<th>Progress</th>';
-    thead += '<th>Trend</th><th>Git</th><th>Assignee</th><th></th></tr>';
+    thead += '<th>Trend</th><th>Git</th><th>Assignee</th></tr>';
 
     let html = `
       <table class="issues-table issues-table-fixed">
@@ -1268,9 +1299,6 @@ class App {
     for (const issue of issues) {
       const f = issue.fields;
       const statusClass = UI.getStatusClass(f.status?.statusCategory?.key);
-      const localStatus = this.getLocalField(issue.key, 'status');
-      const localConfidence = this.getLocalField(issue.key, 'confidence');
-
       const EXCLUDED_LINK_TYPES = ['cloners', 'duplicate'];
       const childCount = (f.issuelinks || []).filter(link => {
         if (!link.outwardIssue) return false;
@@ -1282,6 +1310,7 @@ class App {
 
       html += `
         <tr class="${isEpic ? 'epic-row' : ''}" data-key="${issue.key}">
+          <td><span class="table-detail-btn" data-key="${issue.key}" title="View details">👁</span></td>
           <td>${compactType
             ? `<span class="issue-type-compact" title="${UI.escapeHtml(f.issuetype?.name || '-')}">${UI.escapeHtml((f.issuetype?.name || '-')[0])}</span>`
             : `<span class="issue-type">
@@ -1303,22 +1332,14 @@ class App {
           </td>`;
       }
 
-      if (showLocalFields) {
-        html += `
-          <td>
-            <span class="editable-field editable-status" data-key="${issue.key}" data-field="status" title="Status (0-100)">${localStatus !== null ? localStatus + '%' : '—'}</span>
-          </td>
-          <td>
-            <span class="editable-field editable-confidence" data-key="${issue.key}" data-field="confidence" title="Confidence (0-100)">${localConfidence !== null ? localConfidence + '%' : '—'}</span>
-          </td>`;
-      }
-
       if (showPriority) {
         html += `<td>${UI.escapeHtml(f.priority?.name || '-')}</td>`;
       }
 
       if (showItemsCount) {
         html += `<td class="items-count-cell">${childCount || ''}</td>`;
+        const dq = this._getDevQaInfo(issue.key);
+        html += `<td class="items-count-cell" title="${UI.escapeHtml(dq.tooltip)}">${dq.count || ''}</td>`;
       }
 
       if (showProgress) {
@@ -1326,7 +1347,7 @@ class App {
         html += `<td class="progress-cell"><span class="progress-badge progress-${pct}">${pct}%</span></td>`;
       }
 
-      html += `<td class="sparkline-cell">${UI.renderSparkline(this.progressHistory[issue.key] || [])}</td>`;
+      html += `<td class="sparkline-cell">${UI.renderSparkline(this.progressHistory[issue.key] || [], issue.key)}</td>`;
       html += `<td class="git-dot-cell">${UI.renderGitDot(this.gitActivity[issue.key], issue.key)}</td>`;
 
       html += `
@@ -1337,9 +1358,6 @@ class App {
                   ${UI.escapeHtml(f.assignee.displayName)}
                 </span>`
               : '<span class="assignee-unassigned">Unassigned</span>'}
-          </td>
-          <td>
-            <span class="table-detail-btn" data-key="${issue.key}" title="View details">👁</span>
           </td>
         </tr>
       `;
@@ -1356,13 +1374,6 @@ class App {
       });
     });
 
-    container.querySelectorAll('.editable-field').forEach(el => {
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.startInlineEdit(el);
-      });
-    });
-
     // Git dot click handlers
     container.querySelectorAll('.git-dot[data-issue-key]').forEach(dot => {
       dot.addEventListener('click', (e) => {
@@ -1371,12 +1382,22 @@ class App {
       });
     });
 
+    // Sparkline click handlers
+    container.querySelectorAll('.sparkline-clickable[data-issue-key]').forEach(svg => {
+      svg.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._handleSparklineClick(svg);
+      });
+    });
+
     // Make epic rows clickable to load their child tasks
     container.querySelectorAll('tr.epic-row').forEach(row => {
       row.style.cursor = 'pointer';
       row.addEventListener('click', (e) => {
         // Don't trigger if clicking on interactive elements
-        if (e.target.classList.contains('issue-key') || e.target.classList.contains('editable-field') || e.target.classList.contains('git-dot') || e.target.classList.contains('table-detail-btn')) return;
+        const sparkline = e.target.closest('.sparkline-clickable');
+        if (sparkline) return;
+        if (e.target.classList.contains('issue-key') || e.target.classList.contains('git-dot') || e.target.classList.contains('table-detail-btn')) return;
         this.selectEpic(row.dataset.key);
       });
     });

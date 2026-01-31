@@ -111,7 +111,6 @@ const ISSUES = [
     id: '10012', key: 'PROJ-12',
     fields: {
       summary: 'Q1 2026 Release',
-      summary: 'Q1 2026 Release',
       description: 'Milestone для первого квартала 2026. Включает основные фичи авторизации и критические багфиксы.',
       status: STATUSES.inProgress,
       assignee: USERS.ivan,
