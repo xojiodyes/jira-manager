@@ -215,17 +215,35 @@ async function fetchDevStatus(issueId) {
       const summary = await jiraFetch(summaryApi);
       console.log(`[DevStatus]   summary response: ${JSON.stringify(summary).substring(0, 800)}`);
 
-      // Check if summary reports any commits
-      const commitInfo = summary?.summary?.commit || summary?.summary?.repository?.commit;
-      const commitCount = commitInfo?.count || commitInfo?.overall?.count || 0;
-      console.log(`[DevStatus]   summary commit count: ${commitCount}`);
+      // Check if summary reports any PR, commit or repository activity
+      const prInfo = summary?.summary?.pullrequest;
+      const commitInfo = summary?.summary?.commit;
+      const repoInfo = summary?.summary?.repository;
+      const prCount = prInfo?.overall?.count || prInfo?.count || 0;
+      const commitCount = commitInfo?.overall?.count || commitInfo?.count || 0;
+      const repoCount = repoInfo?.overall?.count || repoInfo?.count || 0;
+      const totalActivity = prCount + commitCount + repoCount;
+      console.log(`[DevStatus]   summary: ${commitCount} commits, ${prCount} PRs, ${repoCount} repos`);
 
-      if (commitCount > 0) {
-        console.log(`[DevStatus]   ✓ Summary confirms commits exist, trying detail API...`);
-        // Now try detail to get actual commit data
+      if (totalActivity > 0) {
+        console.log(`[DevStatus]   ✓ Summary confirms activity, trying detail API...`);
+        // Now try detail to get actual commit data with dates
         const detailResult = await fetchDevStatusDetail(issueId);
         if (detailResult) return detailResult;
-        console.log(`[DevStatus]   ⚠ Summary says ${commitCount} commits but detail API returned nothing (likely auth issue with Bitbucket App Link)`);
+
+        // Detail failed (likely auth) — fallback: use lastUpdated from summary as activity dates
+        console.log(`[DevStatus]   ⚠ Detail API failed, using summary lastUpdated as fallback`);
+        const activityDates = new Set();
+        const prLastUpdated = prInfo?.overall?.lastUpdated || prInfo?.lastUpdated;
+        const commitLastUpdated = commitInfo?.overall?.lastUpdated || commitInfo?.lastUpdated;
+        const repoLastUpdated = repoInfo?.overall?.lastUpdated || repoInfo?.lastUpdated;
+        if (prLastUpdated) activityDates.add(new Date(prLastUpdated).toISOString().slice(0, 10));
+        if (commitLastUpdated) activityDates.add(new Date(commitLastUpdated).toISOString().slice(0, 10));
+        if (repoLastUpdated) activityDates.add(new Date(repoLastUpdated).toISOString().slice(0, 10));
+        if (activityDates.size > 0) {
+          console.log(`[DevStatus]   ✓ Fallback activity dates: ${[...activityDates].join(', ')}`);
+          return { _fromSummary: true, activityDates };
+        }
       }
       break; // Summary worked, no need to try next version
     } catch (e) {
@@ -292,6 +310,8 @@ async function fetchDevStatusDetail(issueId) {
 // Extract unique commit dates from dev-status response
 function extractCommitDates(devStatusData) {
   const dates = new Set();
+  // Handle summary fallback format
+  if (devStatusData?._fromSummary) return devStatusData.activityDates;
   if (!devStatusData?.detail) return dates;
   for (const detail of devStatusData.detail) {
     for (const repo of (detail.repositories || [])) {
