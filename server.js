@@ -343,6 +343,61 @@ function aggregateGitActivity(childGitData) {
   return result.lastActivity ? result : null;
 }
 
+// Extract unique developers who worked on an issue in the last 30 days
+// Sources: assignee, changelog authors, comment authors
+function extractDevelopers(issue) {
+  const devMap = {}; // key: displayName, value: { displayName, avatarUrl }
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  const cutoffStr = cutoff.toISOString();
+
+  // 1. Current assignee (always included)
+  const assignee = issue.fields?.assignee;
+  if (assignee?.displayName) {
+    devMap[assignee.displayName] = {
+      displayName: assignee.displayName,
+      avatarUrl: assignee.avatarUrls?.['24x24'] || ''
+    };
+  }
+
+  // 2. Changelog authors (last 30 days)
+  const histories = issue.changelog?.histories || [];
+  for (const h of histories) {
+    if (h.created && h.created >= cutoffStr && h.author?.displayName) {
+      devMap[h.author.displayName] = {
+        displayName: h.author.displayName,
+        avatarUrl: h.author.avatarUrls?.['24x24'] || ''
+      };
+    }
+  }
+
+  // 3. Comment authors (last 30 days)
+  const comments = issue.fields?.comment?.comments || [];
+  for (const c of comments) {
+    if (c.created && c.created >= cutoffStr && c.author?.displayName) {
+      devMap[c.author.displayName] = {
+        displayName: c.author.displayName,
+        avatarUrl: c.author.avatarUrls?.['24x24'] || ''
+      };
+    }
+  }
+
+  return Object.values(devMap);
+}
+
+// Aggregate developers from children: union of unique devs
+function aggregateDevelopers(childDevLists) {
+  const devMap = {};
+  for (const devList of childDevLists) {
+    for (const dev of devList) {
+      if (dev.displayName) {
+        devMap[dev.displayName] = dev;
+      }
+    }
+  }
+  return Object.values(devMap);
+}
+
 // Build array of last N dates as YYYY-MM-DD strings
 function getLast60Days() {
   const days = [];
@@ -438,6 +493,8 @@ async function computeSnapshot(baseJql) {
   const dailyResults = {};
   // gitResults[issueKey] = { lastActivity, prCount, prMerged, prOpen, repoCount, commitCount }
   const gitResults = {};
+  // devResults[issueKey] = [{ displayName, avatarUrl }]
+  const devResults = {};
 
   try {
     snapshotState.phase = 'themes';
@@ -495,12 +552,20 @@ async function computeSnapshot(baseJql) {
                 const childDailyMaps = [];
 
                 const childGitList = [];
+                const childDevLists = [];
                 for (const child of children) {
                   // Get issue with changelog for backfill
                   const childFull = await jiraGetIssue(child.key, true);
                   const childDaily = buildDailyProgress(childFull, days);
                   dailyResults[child.key] = childDaily;
                   childDailyMaps.push(childDaily);
+
+                  // Extract developers for leaf issue
+                  const devs = extractDevelopers(childFull);
+                  if (devs.length > 0) {
+                    devResults[child.key] = devs;
+                    childDevLists.push(devs);
+                  }
 
                   // Fetch git dev-status for leaf issue
                   try {
@@ -530,11 +595,19 @@ async function computeSnapshot(baseJql) {
                     epicGitData.push(epicGit);
                   }
                 }
+                // Aggregate developers for epic
+                if (childDevLists.length > 0) {
+                  devResults[epic.key] = aggregateDevelopers(childDevLists);
+                }
               } else {
                 // Leaf story/task — fetch dev-status directly
                 const epicDaily = buildDailyProgress(epicIssue, days);
                 dailyResults[epic.key] = epicDaily;
                 epicDailyMaps.push(epicDaily);
+
+                // Extract developers for leaf epic
+                const devs = extractDevelopers(epicIssue);
+                if (devs.length > 0) devResults[epic.key] = devs;
 
                 try {
                   console.log(`[Snapshot] Fetching dev-status for leaf epic/story ${epic.key} (id=${epic.id || epicIssue.id})`);
@@ -564,6 +637,11 @@ async function computeSnapshot(baseJql) {
               milestoneGitData.push(msGit);
             }
           }
+          // Aggregate developers for milestone
+          const msEpicDevLists = epics.map(e => devResults[e.key]).filter(Boolean);
+          if (msEpicDevLists.length > 0) {
+            devResults[milestone.key] = aggregateDevelopers(msEpicDevLists);
+          }
 
           snapshotState.totalIssues++;
         }
@@ -576,6 +654,11 @@ async function computeSnapshot(baseJql) {
       if (milestoneGitData.length > 0) {
         const themeGit = aggregateGitActivity(milestoneGitData);
         if (themeGit) gitResults[theme.key] = themeGit;
+      }
+      // Aggregate developers for theme
+      const themeMsDevLists = (milestoneLinkedKeys.length > 0 ? milestoneLinkedKeys : []).map(k => devResults[k]).filter(Boolean);
+      if (themeMsDevLists.length > 0) {
+        devResults[theme.key] = aggregateDevelopers(themeMsDevLists);
       }
 
       snapshotState.totalIssues++;
@@ -591,8 +674,9 @@ async function computeSnapshot(baseJql) {
         }
       }
     }
-    // Save git activity separately (not per-day, just latest state)
+    // Save git activity and developers (not per-day, just latest state)
     PROGRESS_DATA.gitActivity = gitResults;
+    PROGRESS_DATA.developers = devResults;
     PROGRESS_DATA.lastRun = new Date().toISOString();
     saveProgressData();
 
@@ -841,7 +925,7 @@ const server = http.createServer((req, res) => {
   // Progress history — GET all snapshots
   if (pathname === '/api/progress/history' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ snapshots: PROGRESS_DATA.snapshots, gitActivity: PROGRESS_DATA.gitActivity || {}, lastRun: PROGRESS_DATA.lastRun }));
+    res.end(JSON.stringify({ snapshots: PROGRESS_DATA.snapshots, gitActivity: PROGRESS_DATA.gitActivity || {}, developers: PROGRESS_DATA.developers || {}, lastRun: PROGRESS_DATA.lastRun }));
     return;
   }
 

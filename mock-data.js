@@ -526,11 +526,14 @@ function generateMockChangelog(issue) {
   const daysBack = 55; // start transitions ~55 days ago
   const stepDays = Math.floor(daysBack / currentIdx);
 
+  const userKeys = Object.keys(USERS);
   for (let i = 0; i < currentIdx; i++) {
     const transDate = new Date(now);
     transDate.setDate(transDate.getDate() - (daysBack - i * stepDays));
+    const randomUser = USERS[userKeys[Math.floor(Math.random() * userKeys.length)]];
     histories.push({
       id: String(10000 + Math.random() * 10000 | 0),
+      author: randomUser,
       created: transDate.toISOString(),
       items: [{
         field: 'status',

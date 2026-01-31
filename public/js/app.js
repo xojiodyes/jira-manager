@@ -28,6 +28,8 @@ class App {
     this.progressHistory = {}; // { "KEY": [{ date, progress }, ...] }
     // Git activity data per issue
     this.gitActivity = {}; // { "KEY": { lastActivity, prCount, prMerged, prOpen, repoCount, commitCount } }
+    // Developers per issue (last 30 days)
+    this.developers = {}; // { "KEY": [{ displayName, avatarUrl }] }
 
     this.init();
   }
@@ -63,10 +65,12 @@ class App {
       const data = await res.json();
       this.progressHistory = this._transformSnapshots(data.snapshots || {});
       this.gitActivity = data.gitActivity || {};
+      this.developers = data.developers || {};
     } catch (err) {
       console.error('Failed to load progress history:', err);
       this.progressHistory = {};
       this.gitActivity = {};
+      this.developers = {};
     }
   }
 
@@ -582,6 +586,23 @@ class App {
           </div>
         </div>
       </div>
+
+      ${(() => {
+        const devs = this.developers[issue.key] || [];
+        if (devs.length === 0) return '';
+        return `
+          <div class="issue-detail-section">
+            <h4>Developers — last 30 days (${devs.length})</h4>
+            <div class="developers-list">
+              ${devs.map(d => `
+                <span class="developer-chip">
+                  ${d.avatarUrl ? `<img src="${d.avatarUrl}" class="developer-avatar" alt="">` : ''}
+                  ${UI.escapeHtml(d.displayName)}
+                </span>
+              `).join('')}
+            </div>
+          </div>`;
+      })()}
 
       ${history.length ? `
         <div class="issue-detail-section">
