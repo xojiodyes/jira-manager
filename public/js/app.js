@@ -93,23 +93,26 @@ class App {
     return progressResult;
   }
 
-  async startSnapshot() {
+  async startSnapshot(mode = 'all') {
     const jql = this.getSelectedJql();
-    const btn = document.getElementById('snapshotBtn');
+    const trendBtn = document.getElementById('snapshotTrendBtn');
+    const gitBtn = document.getElementById('snapshotGitBtn');
     const statusEl = document.getElementById('snapshotStatus');
-    btn.disabled = true;
+    trendBtn.disabled = true;
+    gitBtn.disabled = true;
     statusEl.textContent = 'Starting...';
 
     try {
       const res = await fetch('/api/progress/snapshot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jql })
+        body: JSON.stringify({ jql, mode })
       });
       const result = await res.json();
       if (!result.ok) {
         statusEl.textContent = result.error || 'Error';
-        btn.disabled = false;
+        trendBtn.disabled = false;
+        gitBtn.disabled = false;
         return;
       }
 
@@ -120,24 +123,28 @@ class App {
         statusEl.textContent = state.message || '';
         if (state.phase === 'done') {
           es.close();
-          btn.disabled = false;
+          trendBtn.disabled = false;
+          gitBtn.disabled = false;
           statusEl.textContent = '';
           UI.toast(`Snapshot complete: ${state.totalIssues} issues`, 'info');
           await this.loadProgressHistory();
           this.loadThemes();
         } else if (state.phase === 'error') {
           es.close();
-          btn.disabled = false;
+          trendBtn.disabled = false;
+          gitBtn.disabled = false;
           statusEl.textContent = 'Error: ' + (state.error || '');
         }
       };
       es.onerror = () => {
         es.close();
-        btn.disabled = false;
+        trendBtn.disabled = false;
+        gitBtn.disabled = false;
         statusEl.textContent = '';
       };
     } catch (err) {
-      btn.disabled = false;
+      trendBtn.disabled = false;
+      gitBtn.disabled = false;
       statusEl.textContent = 'Error';
       console.error('Snapshot error:', err);
     }
@@ -366,9 +373,12 @@ class App {
       this.exportRoadmap();
     });
 
-    // Snapshot button
-    document.getElementById('snapshotBtn').addEventListener('click', () => {
-      this.startSnapshot();
+    // Snapshot buttons
+    document.getElementById('snapshotTrendBtn').addEventListener('click', () => {
+      this.startSnapshot('trend');
+    });
+    document.getElementById('snapshotGitBtn').addEventListener('click', () => {
+      this.startSnapshot('git');
     });
 
     // JQL selector
@@ -582,17 +592,17 @@ class App {
     bodyEl.innerHTML = UI.renderLoading();
 
     try {
-      const [issue, history] = await Promise.all([
+      const [issue, localHistory] = await Promise.all([
         jiraAPI.getIssue(issueKey),
         this.loadHistory(issueKey)
       ]);
-      this.renderIssueDetail(issue, history);
+      this.renderIssueDetail(issue, localHistory, localHistory);
     } catch (err) {
       bodyEl.innerHTML = UI.renderError(err.message);
     }
   }
 
-  renderIssueDetail(issue, history = []) {
+  renderIssueDetail(issue, history = [], localHistory = []) {
     const titleEl = document.getElementById('issueModalTitle');
     const bodyEl = document.getElementById('issueModalBody');
     const f = issue.fields;
@@ -695,10 +705,12 @@ class App {
           <div class="issue-meta-item">
             <span class="issue-meta-label">Status (%)</span>
             <span class="editable-field editable-status" data-key="${issue.key}" data-field="status" title="Status (0-100)">${this.getLocalField(issue.key, 'status') !== null ? this.getLocalField(issue.key, 'status') + '%' : '—'}</span>
+            <span class="local-sparkline">${UI.renderSparkline(this._buildLocalSparklineData(localHistory, 'status'), null, 120, 24)}</span>
           </div>
           <div class="issue-meta-item">
             <span class="issue-meta-label">Confidence (%)</span>
             <span class="editable-field editable-confidence" data-key="${issue.key}" data-field="confidence" title="Confidence (0-100)">${this.getLocalField(issue.key, 'confidence') !== null ? this.getLocalField(issue.key, 'confidence') + '%' : '—'}</span>
+            <span class="local-sparkline">${UI.renderSparkline(this._buildLocalSparklineData(localHistory, 'confidence'), null, 120, 24)}</span>
           </div>
         </div>
       </div>
@@ -801,8 +813,12 @@ class App {
       this.applyHighlight('themes');
       if (data.issues.length > 0) {
         this._kbStayInPanel = 'themes';
+        this._kbGeneration = (this._kbGeneration || 0) + 1;
+        const gen = this._kbGeneration;
         this.selectTheme(data.issues[0].key).then(async () => {
+          if (gen !== this._kbGeneration) return;
           await this._cascadeSelectFirst('milestones');
+          if (gen !== this._kbGeneration) return;
           this.activePanel = 'themes';
           this.applyHighlight('themes');
           this._kbStayInPanel = null;
@@ -884,9 +900,11 @@ class App {
       this.renderHierarchyList(milestonesContainer, data.issues, 'milestone');
 
       // Keyboard: highlight first milestone
-      this.activePanel = 'milestones';
       this.highlightedIndex.milestones = data.issues.length > 0 ? 0 : -1;
-      this.applyHighlight('milestones');
+      if (!this._kbStayInPanel) {
+        this.activePanel = 'milestones';
+        this.applyHighlight('milestones');
+      }
     } catch (err) {
       milestonesContainer.classList.remove('loading-overlay');
       milestonesContainer.innerHTML = UI.renderError(err.message);
@@ -943,9 +961,11 @@ class App {
       this.renderHierarchyTasks(tasksContainer, data.issues);
 
       // Keyboard: highlight first task
-      this.activePanel = 'tasks';
       this.highlightedIndex.tasks = data.issues.length > 0 ? 0 : -1;
-      this.applyHighlight('tasks');
+      if (!this._kbStayInPanel) {
+        this.activePanel = 'tasks';
+        this.applyHighlight('tasks');
+      }
     } catch (err) {
       tasksContainer.classList.remove('loading-overlay');
       tasksContainer.innerHTML = UI.renderError(err.message);
@@ -967,6 +987,9 @@ class App {
         <span class="hlh-summary">Summary</span>
         <span class="hlh-count">Items</span>
         <span class="hlh-count">#D/Q</span>
+        <span class="hlh-count">SP</span>
+        <span class="hlh-edit">S%</span>
+        <span class="hlh-edit">C%</span>
         <span class="hlh-sparkline">Trend</span>
         <span class="hlh-git">Git</span>
       </div>`;
@@ -989,6 +1012,9 @@ class App {
             <span class="hierarchy-summary">${UI.escapeHtml(f.summary)}</span>
             <span class="hierarchy-items-count" title="Child items">${childCount}</span>
             <span class="hierarchy-devqa-count devqa-clickable" data-key="${issue.key}">${this._getDevQaInfo(issue.key).count || ''}</span>
+            <span class="hierarchy-sp-count">${f.customfield_10002 || ''}</span>
+            <span class="hierarchy-edit editable-field editable-status" data-key="${issue.key}" data-field="status">${this.getLocalField(issue.key, 'status') !== null ? this.getLocalField(issue.key, 'status') + '%' : '—'}</span>
+            <span class="hierarchy-edit editable-field editable-confidence" data-key="${issue.key}" data-field="confidence">${this.getLocalField(issue.key, 'confidence') !== null ? this.getLocalField(issue.key, 'confidence') + '%' : '—'}</span>
             <span class="hierarchy-sparkline">${UI.renderSparkline(this.progressHistory[issue.key] || [], issue.key)}</span>
             <span class="hierarchy-git-dot">${UI.renderGitDot(this.gitActivity[issue.key], issue.key)}</span>
           </div>
@@ -1018,6 +1044,12 @@ class App {
         if (e.target.classList.contains('devqa-clickable') && e.target.dataset.key) {
           e.stopPropagation();
           this._handleDevQaClick(e.target);
+          return;
+        }
+        // If clicking on editable field, start inline edit
+        if (e.target.classList.contains('editable-field')) {
+          e.stopPropagation();
+          this.startInlineEdit(e.target);
           return;
         }
         // If clicking on detail button (eye icon), open detail modal
@@ -1241,9 +1273,11 @@ class App {
       this.renderHierarchyTasks(container, data.issues, 'epicSubTasks');
 
       // Keyboard: highlight first epic task
-      this.activePanel = 'epicTasks';
       this.highlightedIndex.epicTasks = data.issues.length > 0 ? 0 : -1;
-      this.applyHighlight('epicTasks');
+      if (!this._kbStayInPanel) {
+        this.activePanel = 'epicTasks';
+        this.applyHighlight('epicTasks');
+      }
     } catch (err) {
       container.classList.remove('loading-overlay');
       container.innerHTML = UI.renderError(err.message);
@@ -1293,6 +1327,9 @@ class App {
     const showItemsCount = context === 'epicTasks';
     if (showItemsCount) colgroup += '<col style="width: 50px;">';  // Items
     if (showItemsCount) colgroup += '<col style="width: 50px;">';  // #D/Q
+    colgroup += '<col style="width: 40px;">';   // SP
+    colgroup += '<col style="width: 56px;">';   // S%
+    colgroup += '<col style="width: 56px;">';   // C%
     if (showProgress) colgroup += '<col style="width: 80px;">';   // Progress
     colgroup += '<col style="width: 84px;">';   // Trend
     colgroup += '<col style="width: 36px;">';   // Git
@@ -1304,6 +1341,7 @@ class App {
     if (showJiraStatus) thead += '<th>Jira Status</th>';
     if (showPriority) thead += '<th>Priority</th>';
     if (showItemsCount) thead += '<th>Items</th><th>#D/Q</th>';
+    thead += '<th>SP</th><th>S%</th><th>C%</th>';
     if (showProgress) thead += '<th>Progress</th>';
     thead += '<th>Trend</th><th>Git</th><th>Assignee</th></tr>';
 
@@ -1359,6 +1397,10 @@ class App {
         const dq = this._getDevQaInfo(issue.key);
         html += `<td class="items-count-cell"><span class="devqa-clickable" data-key="${issue.key}">${dq.count || ''}</span></td>`;
       }
+
+      html += `<td class="items-count-cell">${f.customfield_10002 || ''}</td>`;
+      html += `<td class="editable-cell"><span class="editable-field editable-status" data-key="${issue.key}" data-field="status">${this.getLocalField(issue.key, 'status') !== null ? this.getLocalField(issue.key, 'status') + '%' : '—'}</span></td>`;
+      html += `<td class="editable-cell"><span class="editable-field editable-confidence" data-key="${issue.key}" data-field="confidence">${this.getLocalField(issue.key, 'confidence') !== null ? this.getLocalField(issue.key, 'confidence') + '%' : '—'}</span></td>`;
 
       if (showProgress) {
         const pct = App.statusToProgress(f.status?.name);
@@ -1416,6 +1458,14 @@ class App {
       });
     });
 
+    // Editable field click handlers (Status%, Confidence%)
+    container.querySelectorAll('.editable-field').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.startInlineEdit(el);
+      });
+    });
+
     // Make epic rows clickable to load their child tasks
     container.querySelectorAll('tr.epic-row').forEach(row => {
       row.style.cursor = 'pointer';
@@ -1423,7 +1473,7 @@ class App {
         // Don't trigger if clicking on interactive elements
         const sparkline = e.target.closest('.sparkline-clickable');
         if (sparkline) return;
-        if (e.target.classList.contains('issue-key') || e.target.classList.contains('git-dot') || e.target.classList.contains('table-detail-btn') || e.target.classList.contains('devqa-clickable')) return;
+        if (e.target.classList.contains('issue-key') || e.target.classList.contains('git-dot') || e.target.classList.contains('table-detail-btn') || e.target.classList.contains('devqa-clickable') || e.target.classList.contains('editable-field') || e.target.closest('.editable-field')) return;
         this.selectEpic(row.dataset.key);
       });
     });
@@ -1547,9 +1597,14 @@ class App {
       }
       case 'Enter': {
         e.preventDefault();
-        const detailKey = this.getHighlightedKey(panel);
-        if (detailKey) {
-          this.showIssueDetail(detailKey);
+        // Start quick-edit flow: Enter → Status% → Enter → Confidence% → Enter → next row → Status% ...
+        const rows2 = this.getPanelRows(panel);
+        const idx2 = this.highlightedIndex[panel];
+        if (idx2 >= 0 && idx2 < rows2.length) {
+          const statusField = rows2[idx2].querySelector('.editable-field.editable-status');
+          if (statusField) {
+            this._startQuickEdit(statusField, panel, idx2);
+          }
         }
         break;
       }
@@ -1560,15 +1615,18 @@ class App {
     const key = this.getHighlightedKey(panel);
     if (!key) return;
     const stayPanel = panel;
+    // Use generation counter to handle rapid key presses
+    this._kbGeneration = (this._kbGeneration || 0) + 1;
+    const gen = this._kbGeneration;
     this._kbStayInPanel = stayPanel;
     try {
       if (panel === 'themes') {
         await this.selectTheme(key);
-        // Cascade: auto-select first milestone
+        if (gen !== this._kbGeneration) return; // stale
         await this._cascadeSelectFirst('milestones');
       } else if (panel === 'milestones') {
         await this.selectMilestone(key);
-        // Cascade: auto-select first task/epic
+        if (gen !== this._kbGeneration) return; // stale
         await this._cascadeSelectFirst('tasks');
       } else if (panel === 'tasks') {
         const rows = this.getPanelRows(panel);
@@ -1578,9 +1636,12 @@ class App {
         }
       }
     } finally {
-      this.activePanel = stayPanel;
-      this.applyHighlight(stayPanel);
-      this._kbStayInPanel = null;
+      // Only restore if this is still the latest generation
+      if (gen === this._kbGeneration) {
+        this.activePanel = stayPanel;
+        this.applyHighlight(stayPanel);
+        this._kbStayInPanel = null;
+      }
     }
   }
 
@@ -1606,7 +1667,12 @@ class App {
 
   // === INLINE EDITING ===
 
-  startInlineEdit(el) {
+  /**
+   * Start inline edit on an editable field element.
+   * @param {HTMLElement} el - the .editable-field span
+   * @param {Function} [onNext] - called after successful save via Enter (for quick-edit chain)
+   */
+  startInlineEdit(el, onNext) {
     // Prevent double editing
     if (el.querySelector('input')) return;
 
@@ -1638,32 +1704,79 @@ class App {
       const raw = input.value.trim();
       if (raw === '') {
         restoreContent(currentValue);
-        return;
+        return true; // skip = success (empty means skip)
       }
       const val = parseInt(raw, 10);
       if (isNaN(val) || val < 0 || val > 100) {
         UI.toast('Value must be between 0 and 100', 'error');
         restoreContent(currentValue);
-        return;
+        return false;
       }
       await this.saveLocalField(issueKey, field, val);
       restoreContent(val);
+      return true;
     };
 
     const cancel = () => {
       restoreContent(currentValue);
     };
 
-    input.addEventListener('blur', save);
+    let handled = false;
+    const handleBlur = async () => {
+      if (handled) return;
+      handled = true;
+      await save();
+    };
+
+    input.addEventListener('blur', handleBlur);
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
-        input.removeEventListener('blur', save);
-        save();
+        e.preventDefault();
+        e.stopPropagation();
+        handled = true;
+        input.removeEventListener('blur', handleBlur);
+        save().then(ok => {
+          if (ok && onNext) onNext();
+        });
       }
       if (e.key === 'Escape') {
-        input.removeEventListener('blur', save);
+        e.preventDefault();
+        e.stopPropagation();
+        handled = true;
+        input.removeEventListener('blur', handleBlur);
         cancel();
       }
+    });
+  }
+
+  /**
+   * Quick-edit flow: Enter → Status% → Enter → Confidence% → Enter → next row Status% → ...
+   */
+  _startQuickEdit(statusEl, panel, rowIdx) {
+    this.startInlineEdit(statusEl, () => {
+      // After saving status, move to confidence of same row
+      const rows = this.getPanelRows(panel);
+      if (rowIdx < 0 || rowIdx >= rows.length) return;
+      const row = rows[rowIdx];
+      const confEl = row.querySelector('.editable-field.editable-confidence');
+      if (!confEl) return;
+
+      this.startInlineEdit(confEl, () => {
+        // After saving confidence, advance to next row
+        const nextIdx = rowIdx + 1;
+        const currentRows = this.getPanelRows(panel);
+        if (nextIdx >= currentRows.length) return; // last row — exit
+
+        // Move highlight to next row
+        this.highlightedIndex[panel] = nextIdx;
+        this.applyHighlight(panel);
+
+        const nextRow = currentRows[nextIdx];
+        const nextStatusEl = nextRow.querySelector('.editable-field.editable-status');
+        if (nextStatusEl) {
+          this._startQuickEdit(nextStatusEl, panel, nextIdx);
+        }
+      });
     });
   }
 
@@ -1675,6 +1788,15 @@ class App {
       console.error('Failed to load history:', err);
       return [];
     }
+  }
+
+  _buildLocalSparklineData(localHistory, field) {
+    // Filter entries for this field, sorted by timestamp
+    const entries = (localHistory || [])
+      .filter(h => h.field === field && h.newValue !== null && h.newValue !== undefined)
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    if (entries.length === 0) return [];
+    return entries.map(h => ({ progress: h.newValue, date: h.timestamp.slice(0, 10) }));
   }
 }
 

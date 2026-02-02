@@ -540,7 +540,9 @@ function broadcastSSE(data) {
   }
 }
 
-async function computeSnapshot(baseJql) {
+async function computeSnapshot(baseJql, mode = 'all') {
+  const doTrend = mode === 'all' || mode === 'trend';
+  const doGit = mode === 'all' || mode === 'git';
   if (snapshotState.running) return;
   snapshotState = { running: true, phase: 'themes', current: 0, total: 0, message: 'Starting...', done: false, totalIssues: 0, error: null };
   broadcastSSE(snapshotState);
@@ -599,7 +601,7 @@ async function computeSnapshot(baseJql) {
               snapshotState.message = `${theme.key} → ${milestone.key} → ${epic.key}`;
               broadcastSSE(snapshotState);
 
-              const epicIssue = await jiraGetIssue(epic.key, true); // with changelog
+              const epicIssue = await jiraGetIssue(epic.key, doTrend); // with changelog only for trend
               const childOutwardKeys = extractOutwardKeys(epicIssue);
 
               if (childOutwardKeys.length > 0) {
@@ -612,40 +614,47 @@ async function computeSnapshot(baseJql) {
                 const childDevLists = [];
                 for (const child of children) {
                   // Get issue with changelog for backfill
-                  const childFull = await jiraGetIssue(child.key, true);
-                  const childDaily = buildDailyProgress(childFull, days);
-                  dailyResults[child.key] = childDaily;
-                  childDailyMaps.push(childDaily);
+                  const childFull = doTrend ? await jiraGetIssue(child.key, true) : child;
+                  if (doTrend) {
+                    const childDaily = buildDailyProgress(childFull, days);
+                    dailyResults[child.key] = childDaily;
+                    childDailyMaps.push(childDaily);
 
-                  // Extract developers for leaf issue
-                  const devs = extractDevelopers(childFull);
-                  if (Object.keys(devs).length > 0) {
-                    devResults[child.key] = devs;
-                    childDevLists.push(devs);
+                    // Extract developers for leaf issue
+                    const devs = extractDevelopers(childFull);
+                    if (Object.keys(devs).length > 0) {
+                      devResults[child.key] = devs;
+                      childDevLists.push(devs);
+                    }
                   }
 
                   // Fetch git dev-status for leaf issue
-                  try {
-                    console.log(`[Snapshot] Fetching dev-status for leaf ${child.key} (id=${child.id || childFull.id})`);
-                    const git = await fetchDevStatus(child.id || childFull.id);
-                    if (git) {
-                      console.log(`[Snapshot] ${child.key}: git activity found, last=${git.lastActivity}`);
-                      gitResults[child.key] = git;
-                      childGitList.push(git);
+                  if (doGit) {
+                    try {
+                      const childId = child.id || childFull.id;
+                      console.log(`[Snapshot] Fetching dev-status for leaf ${child.key} (id=${childId})`);
+                      const git = await fetchDevStatus(childId);
+                      if (git) {
+                        console.log(`[Snapshot] ${child.key}: git activity found, last=${git.lastActivity}`);
+                        gitResults[child.key] = git;
+                        childGitList.push(git);
+                      }
+                    } catch (e) {
+                      console.log(`[Snapshot] ${child.key}: dev-status error: ${e.message}`);
                     }
-                  } catch (e) {
-                    console.log(`[Snapshot] ${child.key}: dev-status error: ${e.message}`);
                   }
 
                   snapshotState.totalIssues++;
                 }
 
-                const epicDaily = averageDailyProgress(childDailyMaps, days);
-                dailyResults[epic.key] = epicDaily;
-                epicDailyMaps.push(epicDaily);
+                if (doTrend) {
+                  const epicDaily = averageDailyProgress(childDailyMaps, days);
+                  dailyResults[epic.key] = epicDaily;
+                  epicDailyMaps.push(epicDaily);
+                }
 
                 // Aggregate git for epic
-                if (childGitList.length > 0) {
+                if (doGit && childGitList.length > 0) {
                   const epicGit = aggregateGitActivity(childGitList);
                   if (epicGit) {
                     gitResults[epic.key] = epicGit;
@@ -653,41 +662,47 @@ async function computeSnapshot(baseJql) {
                   }
                 }
                 // Aggregate developers for epic
-                if (childDevLists.length > 0) {
+                if (doTrend && childDevLists.length > 0) {
                   devResults[epic.key] = aggregateDevelopers(childDevLists);
                 }
               } else {
-                // Leaf story/task — fetch dev-status directly
-                const epicDaily = buildDailyProgress(epicIssue, days);
-                dailyResults[epic.key] = epicDaily;
-                epicDailyMaps.push(epicDaily);
+                if (doTrend) {
+                  // Leaf story/task — build daily progress
+                  const epicDaily = buildDailyProgress(epicIssue, days);
+                  dailyResults[epic.key] = epicDaily;
+                  epicDailyMaps.push(epicDaily);
 
-                // Extract developers for leaf epic
-                const devs = extractDevelopers(epicIssue);
-                if (Object.keys(devs).length > 0) devResults[epic.key] = devs;
+                  // Extract developers for leaf epic
+                  const devs = extractDevelopers(epicIssue);
+                  if (Object.keys(devs).length > 0) devResults[epic.key] = devs;
+                }
 
-                try {
-                  console.log(`[Snapshot] Fetching dev-status for leaf epic/story ${epic.key} (id=${epic.id || epicIssue.id})`);
-                  const git = await fetchDevStatus(epic.id || epicIssue.id);
-                  if (git) {
-                    console.log(`[Snapshot] ${epic.key}: git activity found, last=${git.lastActivity}`);
-                    gitResults[epic.key] = git;
-                    epicGitData.push(git);
+                if (doGit) {
+                  try {
+                    console.log(`[Snapshot] Fetching dev-status for leaf epic/story ${epic.key} (id=${epic.id || epicIssue.id})`);
+                    const git = await fetchDevStatus(epic.id || epicIssue.id);
+                    if (git) {
+                      console.log(`[Snapshot] ${epic.key}: git activity found, last=${git.lastActivity}`);
+                      gitResults[epic.key] = git;
+                      epicGitData.push(git);
+                    }
+                  } catch (e) {
+                    console.log(`[Snapshot] ${epic.key}: dev-status error: ${e.message}`);
                   }
-                } catch (e) {
-                  console.log(`[Snapshot] ${epic.key}: dev-status error: ${e.message}`);
                 }
               }
               snapshotState.totalIssues++;
             }
           }
 
-          const msDaily = averageDailyProgress(epicDailyMaps, days);
-          dailyResults[milestone.key] = msDaily;
-          milestoneDailyMaps.push(msDaily);
+          if (doTrend) {
+            const msDaily = averageDailyProgress(epicDailyMaps, days);
+            dailyResults[milestone.key] = msDaily;
+            milestoneDailyMaps.push(msDaily);
+          }
 
           // Aggregate git for milestone
-          if (epicGitData.length > 0) {
+          if (doGit && epicGitData.length > 0) {
             const msGit = aggregateGitActivity(epicGitData);
             if (msGit) {
               gitResults[milestone.key] = msGit;
@@ -695,45 +710,55 @@ async function computeSnapshot(baseJql) {
             }
           }
           // Aggregate developers for milestone (from all epic keys that have devResults)
-          const msEpicDevLists = epicLinkedKeys.map(k => devResults[k]).filter(Boolean);
-          if (msEpicDevLists.length > 0) {
-            devResults[milestone.key] = aggregateDevelopers(msEpicDevLists);
+          if (doTrend) {
+            const msEpicDevLists = epicLinkedKeys.map(k => devResults[k]).filter(Boolean);
+            if (msEpicDevLists.length > 0) {
+              devResults[milestone.key] = aggregateDevelopers(msEpicDevLists);
+            }
           }
 
           snapshotState.totalIssues++;
         }
       }
 
-      const themeDaily = averageDailyProgress(milestoneDailyMaps, days);
-      dailyResults[theme.key] = themeDaily;
+      if (doTrend) {
+        const themeDaily = averageDailyProgress(milestoneDailyMaps, days);
+        dailyResults[theme.key] = themeDaily;
+      }
 
       // Aggregate git for theme
-      if (milestoneGitData.length > 0) {
+      if (doGit && milestoneGitData.length > 0) {
         const themeGit = aggregateGitActivity(milestoneGitData);
         if (themeGit) gitResults[theme.key] = themeGit;
       }
       // Aggregate developers for theme
-      const themeMsDevLists = (milestoneLinkedKeys.length > 0 ? milestoneLinkedKeys : []).map(k => devResults[k]).filter(Boolean);
-      if (themeMsDevLists.length > 0) {
-        devResults[theme.key] = aggregateDevelopers(themeMsDevLists);
+      if (doTrend) {
+        const themeMsDevLists = (milestoneLinkedKeys.length > 0 ? milestoneLinkedKeys : []).map(k => devResults[k]).filter(Boolean);
+        if (themeMsDevLists.length > 0) {
+          devResults[theme.key] = aggregateDevelopers(themeMsDevLists);
+        }
       }
 
       snapshotState.totalIssues++;
     }
 
     // Save: merge daily results into snapshots (one entry per date per issue)
-    for (const day of days) {
-      if (!PROGRESS_DATA.snapshots[day]) PROGRESS_DATA.snapshots[day] = {};
-      for (const [key, dailyMap] of Object.entries(dailyResults)) {
-        if (dailyMap[day] !== undefined) {
-          const entry = { progress: dailyMap[day] };
-          PROGRESS_DATA.snapshots[day][key] = entry;
+    if (doTrend) {
+      for (const day of days) {
+        if (!PROGRESS_DATA.snapshots[day]) PROGRESS_DATA.snapshots[day] = {};
+        for (const [key, dailyMap] of Object.entries(dailyResults)) {
+          if (dailyMap[day] !== undefined) {
+            const entry = { progress: dailyMap[day] };
+            PROGRESS_DATA.snapshots[day][key] = entry;
+          }
         }
       }
+      PROGRESS_DATA.developers = devResults;
     }
-    // Save git activity and developers (not per-day, just latest state)
-    PROGRESS_DATA.gitActivity = gitResults;
-    PROGRESS_DATA.developers = devResults;
+    // Save git activity (not per-day, just latest state)
+    if (doGit) {
+      PROGRESS_DATA.gitActivity = gitResults;
+    }
     PROGRESS_DATA.lastRun = new Date().toISOString();
     saveProgressData();
 
@@ -1231,10 +1256,10 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ error: 'Snapshot already running' }));
         return;
       }
-      let jql = '';
-      try { jql = JSON.parse(body).jql || ''; } catch (e) {}
+      let jql = '', mode = 'all';
+      try { const parsed = JSON.parse(body); jql = parsed.jql || ''; mode = parsed.mode || 'all'; } catch (e) {}
       // Start async computation (don't await)
-      computeSnapshot(jql);
+      computeSnapshot(jql, mode);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, message: 'Snapshot started' }));
     });

@@ -1106,6 +1106,12 @@ a:hover {
   text-align: center;
 }
 
+.hlh-edit {
+  width: 52px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
 .hlh-git {
   width: 28px;
   flex-shrink: 0;
@@ -1170,8 +1176,18 @@ a:hover {
   opacity: 0.7;
 }
 
+.hierarchy-edit {
+  flex-shrink: 0;
+  width: 52px;
+}
+
+.editable-cell {
+  text-align: center;
+}
+
 .hierarchy-items-count,
-.hierarchy-devqa-count {
+.hierarchy-devqa-count,
+.hierarchy-sp-count {
   flex-shrink: 0;
   width: 34px;
   display: inline-flex;
@@ -1278,6 +1294,14 @@ a:hover {
 .btn-cancel:hover {
   background: var(--color-danger) !important;
   color: white !important;
+}
+
+/* Local sparkline in issue detail modal */
+.local-sparkline {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  vertical-align: middle;
 }
 
 /* Editable Fields (Status & Confidence) */
