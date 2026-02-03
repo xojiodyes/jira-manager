@@ -879,6 +879,7 @@ function applyOuterBorder(ws, startRow, startCol, endRow, endCol) {
 
 async function generateRoadmapExcel(baseJql) {
   const buckets = buildTimeBuckets();
+  console.log('[Excel] Time buckets:', buckets.map(b => b.label).join(', '));
 
   // Column layout: A=empty(1), B=Theme(2), C=Resources(3), D..=buckets
   const THEME_COL = 2;
