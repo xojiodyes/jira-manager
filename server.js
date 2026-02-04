@@ -834,8 +834,9 @@ function buildTimeBuckets() {
     buckets.push({ label: formatMonthLabel(start), start, end, type: 'month' });
   }
 
-  // 3 quarters (starting from the quarter after the last month)
-  let qStart = nextQuarterStartOnOrAfter(addMonths(today, 3));
+  // 3 quarters (starting from the quarter containing the month after the last displayed month)
+  const monthAfterLast = addMonths(today, 3); // e.g., if showing Feb-Mar-Apr, this is May
+  let qStart = quarterStartFor(monthAfterLast);  // May is in Q2 (Apr-Jun) → qStart = Apr 1
   for (let i = 0; i < 3; i++) {
     const qEnd = addMonths(qStart, 3);
     qEnd.setDate(qEnd.getDate() - 1);
