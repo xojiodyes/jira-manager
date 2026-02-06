@@ -6,6 +6,7 @@ const path = require('path');
 const ExcelJS = require('./vendor/exceljs.bundle.js');
 
 const { handleMockRequest } = require('./mock-data');
+const { createStore } = require('./db');
 
 const PORT = process.env.PORT || 3000;
 const MODE = process.env.MODE || 'mock'; // 'mock' or 'real'
@@ -41,51 +42,12 @@ if (MODE === 'real') {
   }
 }
 
-// Local data storage (status, confidence per issue) with history
-const DATA_FILE = path.join(__dirname, 'data.json');
-let LOCAL_DATA = { issues: {}, history: [] };
-try {
-  const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-  // Support migration from old flat format
-  if (raw.issues) {
-    LOCAL_DATA = raw;
-    if (!LOCAL_DATA.history) LOCAL_DATA.history = [];
-  } else {
-    // Old format: flat { "KEY-1": { ... } } → migrate
-    LOCAL_DATA = { issues: raw, history: [] };
-  }
-} catch (e) {
-  // File doesn't exist yet — start empty
-}
-
-function saveLocalData() {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(LOCAL_DATA, null, 2), 'utf8');
-}
+// Data store (file-based or PostgreSQL, initialized async before server.listen)
+let store;
 
 function getCurrentUser() {
   if (CONFIG && CONFIG.jiraUser) return CONFIG.jiraUser;
   return 'mock-user';
-}
-
-// Progress history storage
-const PROGRESS_FILE = path.join(__dirname, 'progress-history.json');
-let PROGRESS_DATA = { snapshots: {}, lastRun: null };
-try {
-  PROGRESS_DATA = JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf8'));
-  if (!PROGRESS_DATA.snapshots) PROGRESS_DATA.snapshots = {};
-} catch (e) {
-  // File doesn't exist yet
-}
-
-function saveProgressData() {
-  // Prune to last 60 days
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 60);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
-  for (const date of Object.keys(PROGRESS_DATA.snapshots)) {
-    if (date < cutoffStr) delete PROGRESS_DATA.snapshots[date];
-  }
-  fs.writeFileSync(PROGRESS_FILE, JSON.stringify(PROGRESS_DATA, null, 2), 'utf8');
 }
 
 // Status → Progress mapping (same as frontend App.STATUS_PROGRESS_MAP)
@@ -742,25 +704,8 @@ async function computeSnapshot(baseJql, mode = 'all') {
       snapshotState.totalIssues++;
     }
 
-    // Save: merge daily results into snapshots (one entry per date per issue)
-    if (doTrend) {
-      for (const day of days) {
-        if (!PROGRESS_DATA.snapshots[day]) PROGRESS_DATA.snapshots[day] = {};
-        for (const [key, dailyMap] of Object.entries(dailyResults)) {
-          if (dailyMap[day] !== undefined) {
-            const entry = { progress: dailyMap[day] };
-            PROGRESS_DATA.snapshots[day][key] = entry;
-          }
-        }
-      }
-      PROGRESS_DATA.developers = devResults;
-    }
-    // Save git activity (not per-day, just latest state)
-    if (doGit) {
-      PROGRESS_DATA.gitActivity = gitResults;
-    }
-    PROGRESS_DATA.lastRun = new Date().toISOString();
-    saveProgressData();
+    // Save all computed data via store
+    await store.saveSnapshotData({ dailyResults, gitResults, devResults, days, mode });
 
     snapshotState.phase = 'done';
     snapshotState.message = `Done. ${snapshotState.totalIssues} issues processed.`;
@@ -1194,15 +1139,20 @@ const server = http.createServer((req, res) => {
 
   // Local data API — GET all issues data, POST update single field with history
   if (pathname === '/api/data' && req.method === 'GET') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(LOCAL_DATA.issues));
+    store.getAllIssues().then(issues => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(issues));
+    }).catch(err => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    });
     return;
   }
 
   if (pathname === '/api/data' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk.toString(); });
-    req.on('end', () => {
+    req.on('end', async () => {
       try {
         const { issueKey, field, value } = JSON.parse(body);
         if (!issueKey || !field) {
@@ -1210,12 +1160,9 @@ const server = http.createServer((req, res) => {
           res.end(JSON.stringify({ error: 'issueKey and field required' }));
           return;
         }
-        if (!LOCAL_DATA.issues[issueKey]) LOCAL_DATA.issues[issueKey] = {};
-        const oldValue = LOCAL_DATA.issues[issueKey][field] ?? null;
-        LOCAL_DATA.issues[issueKey][field] = value;
-
-        // Record history entry
-        LOCAL_DATA.history.push({
+        const oldValue = await store.getIssueField(issueKey, field);
+        await store.upsertIssueField(issueKey, field, value);
+        await store.appendHistory({
           issueKey,
           field,
           oldValue,
@@ -1224,9 +1171,10 @@ const server = http.createServer((req, res) => {
           timestamp: new Date().toISOString()
         });
 
-        saveLocalData();
+        // Return updated issue data
+        const allIssues = await store.getAllIssues();
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, data: LOCAL_DATA.issues[issueKey] }));
+        res.end(JSON.stringify({ ok: true, data: allIssues[issueKey] || {} }));
       } catch (err) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message }));
@@ -1239,12 +1187,13 @@ const server = http.createServer((req, res) => {
   if (pathname.startsWith('/api/data/history') && req.method === 'GET') {
     const parts = pathname.split('/');
     const issueKey = parts[4] || null; // /api/data/history/KEY-1
-    let history = LOCAL_DATA.history;
-    if (issueKey) {
-      history = history.filter(h => h.issueKey === issueKey);
-    }
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(history));
+    store.getHistory(issueKey).then(history => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(history));
+    }).catch(err => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    });
     return;
   }
 
@@ -1290,8 +1239,13 @@ const server = http.createServer((req, res) => {
 
   // Progress history — GET all snapshots
   if (pathname === '/api/progress/history' && req.method === 'GET') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ snapshots: PROGRESS_DATA.snapshots, gitActivity: PROGRESS_DATA.gitActivity || {}, developers: PROGRESS_DATA.developers || {}, lastRun: PROGRESS_DATA.lastRun }));
+    store.getProgressData().then(data => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(data));
+    }).catch(err => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    });
     return;
   }
 
@@ -1351,15 +1305,26 @@ const server = http.createServer((req, res) => {
   serveStatic(req, res, filePath);
 });
 
-server.listen(PORT, () => {
-  console.log('');
-  console.log('┌─────────────────────────────────────────┐');
-  console.log('│                                         │');
-  console.log('│   Jira Manager started                  │');
-  console.log('│                                         │');
-  console.log(`│   http://localhost:${PORT}                  │`);
-  console.log(`│   Mode: ${MODE === 'mock' ? 'MOCK (test data)' : 'REAL (' + CONFIG.jiraHost + ')'}`.padEnd(42) + '│');
-  console.log('│                                         │');
-  console.log('└─────────────────────────────────────────┘');
-  console.log('');
-});
+// Initialize store and start server
+(async () => {
+  try {
+    store = await createStore(CONFIG || {});
+  } catch (err) {
+    console.error('[DB] Failed to initialize store:', err.message);
+    process.exit(1);
+  }
+
+  server.listen(PORT, () => {
+    console.log('');
+    console.log('┌─────────────────────────────────────────┐');
+    console.log('│                                         │');
+    console.log('│   Jira Manager started                  │');
+    console.log('│                                         │');
+    console.log(`│   http://localhost:${PORT}                  │`);
+    console.log(`│   Mode: ${MODE === 'mock' ? 'MOCK (test data)' : 'REAL (' + CONFIG.jiraHost + ')'}`.padEnd(42) + '│');
+    console.log(`│   Store: ${store.type}`.padEnd(42) + '│');
+    console.log('│                                         │');
+    console.log('└─────────────────────────────────────────┘');
+    console.log('');
+  });
+})();

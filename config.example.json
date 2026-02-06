@@ -2,5 +2,8 @@
   "jiraHost": "your-domain.atlassian.net",
   "jiraUser": "your-email@company.com",
   "apiToken": "your-api-token-here",
-  "hierarchyJql": "labels = theme ORDER BY updated DESC"
+  "hierarchyJql": "labels = theme ORDER BY updated DESC",
+  "database": {
+    "connectionString": "postgresql://user:password@localhost:5432/jira_manager"
+  }
 }
