@@ -10,7 +10,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { Pool } = require('pg');
+const { Pool } = require('../vendor/pg.bundle.js');
 const { runMigrations } = require('./migrate-lib');
 
 function getConnectionString() {

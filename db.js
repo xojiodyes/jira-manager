@@ -335,7 +335,7 @@ async function createStore(config) {
   const connStr = process.env.DATABASE_URL || config?.database?.connectionString;
 
   if (connStr) {
-    const { Pool } = require('pg');
+    const { Pool } = require('./vendor/pg.bundle.js');
     const pool = new Pool({
       connectionString: connStr,
       max: 10,
