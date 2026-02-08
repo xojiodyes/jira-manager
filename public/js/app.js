@@ -186,6 +186,7 @@ class App {
   }
 
   async saveLocalField(issueKey, field, value) {
+    console.log('[saveLocalField] Saving:', issueKey, field, value);
     try {
       const res = await fetch('/api/data', {
         method: 'POST',
@@ -193,6 +194,7 @@ class App {
         body: JSON.stringify({ issueKey, field, value })
       });
       const result = await res.json();
+      console.log('[saveLocalField] Response:', result);
       if (result.ok) {
         if (!this.localData[issueKey]) this.localData[issueKey] = {};
         this.localData[issueKey][field] = value;
@@ -1702,6 +1704,7 @@ class App {
 
     const save = async () => {
       const raw = input.value.trim();
+      console.log('[save] raw value:', raw, 'issueKey:', issueKey, 'field:', field);
       if (raw === '') {
         restoreContent(currentValue);
         return true; // skip = success (empty means skip)
@@ -1712,6 +1715,7 @@ class App {
         restoreContent(currentValue);
         return false;
       }
+      console.log('[save] Calling saveLocalField with val:', val);
       await this.saveLocalField(issueKey, field, val);
       restoreContent(val);
       return true;
