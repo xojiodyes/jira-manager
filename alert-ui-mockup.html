@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alert Detail — Log Monitor</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+      background: #fafafa;
+      color: #1a1a1a;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Top bar ── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 32px;
+      border-bottom: 1px solid #e5e5e5;
+      background: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: #888;
+    }
+
+    .breadcrumb a {
+      color: #888;
+      text-decoration: none;
+    }
+
+    .breadcrumb a:hover {
+      color: #1a1a1a;
+    }
+
+    .breadcrumb .sep {
+      color: #ccc;
+    }
+
+    .breadcrumb .current {
+      color: #1a1a1a;
+      font-weight: 500;
+    }
+
+    .topbar-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid #e0e0e0;
+      background: #fff;
+      color: #555;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn:hover {
+      background: #f5f5f5;
+      border-color: #ccc;
+    }
+
+    .btn-primary {
+      background: #1a1a1a;
+      color: #fff;
+      border-color: #1a1a1a;
+    }
+
+    .btn-primary:hover {
+      background: #333;
+    }
+
+    /* ── Main layout ── */
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 40px 32px 80px;
+    }
+
+    /* ── Severity badge ── */
+    .severity-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .severity-critical {
+      background: #fef2f2;
+      color: #dc2626;
+      border: 1px solid #fecaca;
+    }
+
+    .severity-warning {
+      background: #fffbeb;
+      color: #d97706;
+      border: 1px solid #fde68a;
+    }
+
+    .severity-info {
+      background: #eff6ff;
+      color: #2563eb;
+      border: 1px solid #bfdbfe;
+    }
+
+    .severity-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* ── Header ── */
+    .alert-header {
+      margin-bottom: 32px;
+    }
+
+    .alert-header-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .alert-id {
+      font-size: 13px;
+      color: #999;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    .alert-time {
+      font-size: 13px;
+      color: #999;
+      margin-left: auto;
+    }
+
+    .alert-title {
+      font-size: 22px;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-bottom: 8px;
+      line-height: 1.3;
+    }
+
+    .alert-component {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 14px;
+      color: #555;
+      background: #f3f3f3;
+      padding: 4px 12px;
+      border-radius: 6px;
+    }
+
+    .alert-component .icon {
+      font-size: 14px;
+      opacity: 0.6;
+    }
+
+    /* ── Meta row ── */
+    .meta-row {
+      display: flex;
+      gap: 24px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: #777;
+    }
+
+    .meta-item .label {
+      color: #aaa;
+    }
+
+    .meta-item .value {
+      color: #555;
+      font-weight: 500;
+    }
+
+    /* ── Sections ── */
+    .section {
+      margin-bottom: 28px;
+    }
+
+    .section-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #aaa;
+      margin-bottom: 10px;
+    }
+
+    /* ── Error description ── */
+    .error-description {
+      background: #fff;
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      padding: 20px;
+    }
+
+    .error-message {
+      font-size: 15px;
+      color: #1a1a1a;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+
+    .error-detail {
+      font-size: 14px;
+      color: #666;
+      line-height: 1.6;
+    }
+
+    /* ── Stacktrace ── */
+    .stacktrace-wrapper {
+      background: #1a1a1a;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .stacktrace-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-bottom: 1px solid #2a2a2a;
+    }
+
+    .stacktrace-header span {
+      font-size: 12px;
+      color: #888;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    .copy-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #888;
+      border: 1px solid #333;
+      background: transparent;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .copy-btn:hover {
+      color: #ccc;
+      border-color: #555;
+    }
+
+    .stacktrace {
+      padding: 16px;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 12.5px;
+      line-height: 1.7;
+      color: #ccc;
+      overflow-x: auto;
+    }
+
+    .stacktrace .error-line {
+      color: #ef4444;
+      font-weight: 500;
+    }
+
+    .stacktrace .highlight {
+      color: #f8f8f8;
+      background: rgba(239, 68, 68, 0.12);
+      border-radius: 3px;
+      padding: 1px 0;
+      display: inline;
+    }
+
+    .stacktrace .dimmed {
+      color: #555;
+    }
+
+    .stacktrace .file-ref {
+      color: #60a5fa;
+    }
+
+    .stacktrace .line-num {
+      color: #555;
+      display: inline-block;
+      width: 28px;
+      text-align: right;
+      margin-right: 16px;
+      user-select: none;
+    }
+
+    /* ── Related alerts ── */
+    .related-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      background: #e5e5e5;
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .related-item {
+      display: flex;
+      align-items: center;
+      padding: 14px 16px;
+      background: #fff;
+      cursor: pointer;
+      transition: background 0.1s;
+      gap: 12px;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .related-item:hover {
+      background: #f9f9f9;
+    }
+
+    .related-item .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .related-item .dot.critical { background: #ef4444; }
+    .related-item .dot.warning { background: #f59e0b; }
+    .related-item .dot.resolved { background: #22c55e; }
+
+    .related-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .related-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: #1a1a1a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .related-meta {
+      font-size: 12px;
+      color: #999;
+      margin-top: 2px;
+    }
+
+    .related-component {
+      font-size: 12px;
+      color: #888;
+      background: #f3f3f3;
+      padding: 2px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    .related-count {
+      font-size: 12px;
+      color: #999;
+      white-space: nowrap;
+    }
+
+    .related-arrow {
+      color: #ccc;
+      font-size: 14px;
+    }
+
+    /* ── Links section ── */
+    .links-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .link-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: #fff;
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      font-size: 14px;
+      color: #1a1a1a;
+      text-decoration: none;
+      transition: all 0.15s;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .link-card:hover {
+      border-color: #ccc;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+
+    .link-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .link-icon.logs {
+      background: #f0f4ff;
+      color: #4f6df5;
+    }
+
+    .link-icon.grafana {
+      background: #fff7ed;
+      color: #ea580c;
+    }
+
+    .link-icon.jira {
+      background: #eef2ff;
+      color: #4f46e5;
+    }
+
+    .link-card-text .link-label {
+      font-weight: 500;
+      font-size: 13px;
+    }
+
+    .link-card-text .link-desc {
+      font-size: 12px;
+      color: #999;
+      margin-top: 1px;
+    }
+
+    /* ── Divider ── */
+    .divider {
+      border: none;
+      border-top: 1px solid #eee;
+      margin: 32px 0;
+    }
+
+    /* ── Occurrences bar ── */
+    .occurrences {
+      background: #fff;
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      padding: 20px;
+    }
+
+    .occurrences-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .occurrences-count {
+      font-size: 28px;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+
+    .occurrences-period {
+      font-size: 12px;
+      color: #999;
+    }
+
+    .chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 48px;
+    }
+
+    .chart-bar {
+      flex: 1;
+      background: #ef4444;
+      border-radius: 2px;
+      opacity: 0.2;
+      transition: opacity 0.15s;
+      min-height: 3px;
+    }
+
+    .chart-bar.active {
+      opacity: 0.7;
+    }
+
+    .chart-bar:hover {
+      opacity: 1;
+    }
+
+    .chart-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 6px;
+      font-size: 10px;
+      color: #bbb;
+    }
+
+    /* ── Status indicator ── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: #fef2f2;
+      border-radius: 8px;
+      margin-bottom: 24px;
+    }
+
+    .status-pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ef4444;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .status-text {
+      font-size: 13px;
+      color: #991b1b;
+      font-weight: 500;
+    }
+
+    .status-time {
+      margin-left: auto;
+      font-size: 12px;
+      color: #b91c1c;
+    }
+
+    /* ── Action buttons group ── */
+    .action-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      border: 1px solid #e0e0e0;
+      background: #fff;
+      color: #555;
+      cursor: pointer;
+      transition: all 0.15s;
+      flex: 1;
+      justify-content: center;
+    }
+
+    .action-btn:hover {
+      border-color: #ccc;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+
+    .action-btn.active {
+      border-color: transparent;
+      color: #fff;
+    }
+
+    .action-btn .action-icon {
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    /* Acknowledge */
+    .action-btn.acknowledge:hover {
+      background: #f0f4ff;
+      border-color: #bfdbfe;
+      color: #2563eb;
+    }
+
+    .action-btn.acknowledge.active {
+      background: #2563eb;
+    }
+
+    /* No Impact */
+    .action-btn.no-impact:hover {
+      background: #f0fdf4;
+      border-color: #bbf7d0;
+      color: #16a34a;
+    }
+
+    .action-btn.no-impact.active {
+      background: #16a34a;
+    }
+
+    /* Has Impact */
+    .action-btn.has-impact:hover {
+      background: #fef2f2;
+      border-color: #fecaca;
+      color: #dc2626;
+    }
+
+    .action-btn.has-impact.active {
+      background: #dc2626;
+    }
+
+    /* It's Noise */
+    .action-btn.noise:hover {
+      background: #f5f5f5;
+      border-color: #d4d4d4;
+      color: #737373;
+    }
+
+    .action-btn.noise.active {
+      background: #737373;
+    }
+
+    /* Assign to */
+    .action-btn.assign {
+      position: relative;
+    }
+
+    .action-btn.assign:hover {
+      background: #faf5ff;
+      border-color: #e9d5ff;
+      color: #7c3aed;
+    }
+
+    .action-btn.assign.active {
+      background: #7c3aed;
+    }
+
+    .assign-dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+      z-index: 20;
+      overflow: hidden;
+    }
+
+    .assign-dropdown.open {
+      display: block;
+    }
+
+    .assign-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #333;
+      cursor: pointer;
+      transition: background 0.1s;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+    }
+
+    .assign-option:hover {
+      background: #f5f5f5;
+    }
+
+    .assign-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #e5e5e5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: #666;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <nav class="breadcrumb">
+        <a href="#">Alerts</a>
+        <span class="sep">/</span>
+        <span class="current">ALR-4821</span>
+      </nav>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn">&#128276; Mute</button>
+      <button class="btn btn-primary">&#10003; Resolve</button>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <!-- Status bar -->
+    <div class="status-bar">
+      <div class="status-pulse"></div>
+      <span class="status-text">Active — error is still occurring</span>
+      <span class="status-time">Last seen 2 min ago</span>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="action-group">
+      <button class="action-btn acknowledge" onclick="selectAction(this)">
+        <span class="action-icon">&#128065;</span>
+        Acknowledge
+      </button>
+      <button class="action-btn no-impact" onclick="selectAction(this)">
+        <span class="action-icon">&#10003;</span>
+        No Impact
+      </button>
+      <button class="action-btn has-impact" onclick="selectAction(this)">
+        <span class="action-icon">&#9888;</span>
+        Has Impact
+      </button>
+      <button class="action-btn noise" onclick="selectAction(this)">
+        <span class="action-icon">&#128263;</span>
+        It's Noise
+      </button>
+      <button class="action-btn assign" onclick="toggleAssign(event, this)">
+        <span class="action-icon">&#128100;</span>
+        <span class="assign-label">Assign to...</span>
+        <div class="assign-dropdown" onclick="event.stopPropagation()">
+          <div class="assign-option" onclick="assignTo(event, 'AS', 'Alex Sokolov')">
+            <span class="assign-avatar">AS</span> Alex Sokolov
+          </div>
+          <div class="assign-option" onclick="assignTo(event, 'MK', 'Maria Kim')">
+            <span class="assign-avatar">MK</span> Maria Kim
+          </div>
+          <div class="assign-option" onclick="assignTo(event, 'DV', 'Dmitry Volkov')">
+            <span class="assign-avatar">DV</span> Dmitry Volkov
+          </div>
+          <div class="assign-option" onclick="assignTo(event, 'ME', 'Me')">
+            <span class="assign-avatar">ME</span> Assign to me
+          </div>
+        </div>
+      </button>
+    </div>
+
+    <!-- Header -->
+    <div class="alert-header">
+      <div class="alert-header-top">
+        <span class="severity-badge severity-critical">
+          <span class="severity-dot"></span>
+          Critical
+        </span>
+        <span class="alert-id">ALR-4821</span>
+        <span class="alert-time">Feb 9, 2026 at 14:32 UTC</span>
+      </div>
+
+      <h1 class="alert-title">NullPointerException in PaymentService.processTransaction()</h1>
+
+      <div class="alert-component">
+        <span class="icon">&#9649;</span>
+        payment-service
+      </div>
+
+      <div class="meta-row">
+        <div class="meta-item">
+          <span class="label">Environment</span>
+          <span class="value">production</span>
+        </div>
+        <div class="meta-item">
+          <span class="label">Host</span>
+          <span class="value">pay-prod-03</span>
+        </div>
+        <div class="meta-item">
+          <span class="label">Version</span>
+          <span class="value">v2.14.1</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Occurrences -->
+    <div class="section">
+      <div class="occurrences">
+        <div class="occurrences-header">
+          <div>
+            <span class="occurrences-count">847</span>
+            <span class="occurrences-period"> occurrences in the last 24h</span>
+          </div>
+        </div>
+        <div class="chart">
+          <div class="chart-bar" style="height: 10%"></div>
+          <div class="chart-bar" style="height: 8%"></div>
+          <div class="chart-bar" style="height: 5%"></div>
+          <div class="chart-bar" style="height: 12%"></div>
+          <div class="chart-bar" style="height: 7%"></div>
+          <div class="chart-bar" style="height: 3%"></div>
+          <div class="chart-bar" style="height: 4%"></div>
+          <div class="chart-bar" style="height: 6%"></div>
+          <div class="chart-bar" style="height: 5%"></div>
+          <div class="chart-bar" style="height: 8%"></div>
+          <div class="chart-bar" style="height: 15%"></div>
+          <div class="chart-bar" style="height: 12%"></div>
+          <div class="chart-bar" style="height: 20%"></div>
+          <div class="chart-bar" style="height: 25%"></div>
+          <div class="chart-bar" style="height: 30%"></div>
+          <div class="chart-bar" style="height: 45%"></div>
+          <div class="chart-bar" style="height: 55%"></div>
+          <div class="chart-bar" style="height: 70%"></div>
+          <div class="chart-bar active" style="height: 85%"></div>
+          <div class="chart-bar active" style="height: 95%"></div>
+          <div class="chart-bar active" style="height: 100%"></div>
+          <div class="chart-bar active" style="height: 90%"></div>
+          <div class="chart-bar active" style="height: 80%"></div>
+          <div class="chart-bar active" style="height: 60%"></div>
+        </div>
+        <div class="chart-labels">
+          <span>24h ago</span>
+          <span>12h ago</span>
+          <span>now</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error description -->
+    <div class="section">
+      <div class="section-title">Error description</div>
+      <div class="error-description">
+        <div class="error-message">java.lang.NullPointerException: Cannot invoke method getAmount() on null reference</div>
+        <div class="error-detail">
+          The <code>transaction</code> object passed to <code>processTransaction()</code> was <code>null</code>.
+          This is likely caused by a race condition in the payment queue consumer — the transaction record
+          is being fetched before it's committed to the database. First observed after deploy <strong>v2.14.1</strong> (Feb 9, 14:12 UTC).
+        </div>
+      </div>
+    </div>
+
+    <!-- Stacktrace -->
+    <div class="section">
+      <div class="section-title">Stacktrace</div>
+      <div class="stacktrace-wrapper">
+        <div class="stacktrace-header">
+          <span>java.lang.NullPointerException</span>
+          <button class="copy-btn" onclick="navigator.clipboard.writeText(document.querySelector('.stacktrace').innerText)">
+            &#128203; Copy
+          </button>
+        </div>
+        <pre class="stacktrace"><span class="line-num"> 1</span><span class="error-line">java.lang.NullPointerException: Cannot invoke method getAmount() on null reference</span>
+<span class="line-num"> 2</span>    at <span class="highlight">com.app.payment.PaymentService.processTransaction(PaymentService.java:142)</span>
+<span class="line-num"> 3</span>    at com.app.payment.PaymentService.handlePayment(<span class="file-ref">PaymentService.java:89</span>)
+<span class="line-num"> 4</span>    at com.app.payment.PaymentQueueConsumer.onMessage(<span class="file-ref">PaymentQueueConsumer.java:67</span>)
+<span class="line-num"> 5</span>    at com.app.messaging.KafkaConsumerWrapper.poll(<span class="file-ref">KafkaConsumerWrapper.java:134</span>)
+<span class="line-num"> 6</span>    <span class="dimmed">at org.apache.kafka.clients.consumer.KafkaConsumer.poll(KafkaConsumer.java:1244)</span>
+<span class="line-num"> 7</span>    <span class="dimmed">at org.apache.kafka.clients.consumer.KafkaConsumer.poll(KafkaConsumer.java:1206)</span>
+<span class="line-num"> 8</span>    <span class="dimmed">at java.base/java.lang.Thread.run(Thread.java:829)</span></pre>
+      </div>
+    </div>
+
+    <!-- Related alerts -->
+    <div class="section">
+      <div class="section-title">Related alerts</div>
+      <div class="related-list">
+        <a href="#" class="related-item">
+          <span class="dot critical"></span>
+          <div class="related-info">
+            <div class="related-title">NullPointerException in PaymentService.validateCard()</div>
+            <div class="related-meta">Same component &middot; 3 hours ago</div>
+          </div>
+          <span class="related-component">payment-service</span>
+          <span class="related-count">234 occ.</span>
+          <span class="related-arrow">&rsaquo;</span>
+        </a>
+        <a href="#" class="related-item">
+          <span class="dot warning"></span>
+          <div class="related-info">
+            <div class="related-title">TimeoutException in TransactionRepository.findById()</div>
+            <div class="related-meta">Possibly related &middot; 5 hours ago</div>
+          </div>
+          <span class="related-component">transaction-db</span>
+          <span class="related-count">89 occ.</span>
+          <span class="related-arrow">&rsaquo;</span>
+        </a>
+        <a href="#" class="related-item">
+          <span class="dot resolved"></span>
+          <div class="related-info">
+            <div class="related-title">NullPointerException in PaymentService.processRefund()</div>
+            <div class="related-meta">Same error pattern &middot; resolved Feb 3</div>
+          </div>
+          <span class="related-component">payment-service</span>
+          <span class="related-count">1.2k occ.</span>
+          <span class="related-arrow">&rsaquo;</span>
+        </a>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- Quick links -->
+    <div class="section">
+      <div class="section-title">Quick links</div>
+      <div class="links-row">
+        <a href="#" class="link-card">
+          <div class="link-icon logs">&#9776;</div>
+          <div class="link-card-text">
+            <div class="link-label">View Logs</div>
+            <div class="link-desc">Open in log explorer with context</div>
+          </div>
+        </a>
+        <a href="#" class="link-card">
+          <div class="link-icon grafana">&#128200;</div>
+          <div class="link-card-text">
+            <div class="link-label">Grafana Dashboard</div>
+            <div class="link-desc">payment-service metrics</div>
+          </div>
+        </a>
+        <a href="#" class="link-card">
+          <div class="link-icon jira">&#128203;</div>
+          <div class="link-card-text">
+            <div class="link-label">Create Jira Ticket</div>
+            <div class="link-desc">Open issue from this alert</div>
+          </div>
+        </a>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function selectAction(btn) {
+      document.querySelectorAll('.action-btn:not(.assign)').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      // Close assign dropdown if open
+      document.querySelector('.assign-dropdown').classList.remove('open');
+    }
+
+    function toggleAssign(e, btn) {
+      e.stopPropagation();
+      const dropdown = btn.querySelector('.assign-dropdown');
+      dropdown.classList.toggle('open');
+    }
+
+    function assignTo(e, initials, name) {
+      e.stopPropagation();
+      const btn = document.querySelector('.action-btn.assign');
+      const label = btn.querySelector('.assign-label');
+      label.textContent = name;
+      btn.classList.add('active');
+      btn.querySelector('.assign-dropdown').classList.remove('open');
+    }
+
+    // Close dropdown on outside click
+    document.addEventListener('click', () => {
+      document.querySelector('.assign-dropdown').classList.remove('open');
+    });
+  </script>
+
+</body>
+</html>
