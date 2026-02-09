@@ -146,9 +146,9 @@ function createDbStore(pool) {
     async upsertIssueField(issueKey, field, value) {
       await pool.query(`
         INSERT INTO ${S}.issues (issue_key, data, updated_at)
-        VALUES ($1, jsonb_build_object($2, $3::jsonb), NOW())
+        VALUES ($1, jsonb_build_object($2::text, $3::jsonb), NOW())
         ON CONFLICT (issue_key) DO UPDATE
-        SET data = ${S}.issues.data || jsonb_build_object($2, $3::jsonb),
+        SET data = ${S}.issues.data || jsonb_build_object($2::text, $3::jsonb),
             updated_at = NOW()
       `, [issueKey, field, JSON.stringify(value)]);
     },
