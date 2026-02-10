@@ -1401,11 +1401,11 @@
         <a href="#" class="useful-link">
           <span class="link-emoji">&#9776;</span> Splunk Logs
         </a>
-        <a href="#" class="useful-link">
-          <span class="link-emoji">&#9729;</span> Hosting
+        <a href="#" class="useful-link" data-link="hosting">
+          <span class="link-emoji"></span> <span></span>
         </a>
-        <a href="#" class="useful-link">
-          <span class="link-emoji">&#9881;</span> CI/CD
+        <a href="#" class="useful-link" data-link="cicd">
+          <span class="link-emoji"></span> <span></span>
         </a>
       </div>
     </div>
@@ -1428,22 +1428,23 @@
     </button>
   </div>
 
+  <script src="components.js"></script>
   <script>
-    /* ═══════════════════════════════════════════════
-     *  CONSTANTS — edit component names here
-     * ═══════════════════════════════════════════════ */
-    const COMPONENTS = {
-      alertId:           'ALR-4821',
-      currentComponent:  'payment-service',
-      orderService:      'order-service',
-      transactionDb:     'transaction-db',
-    };
-
-    /* ── Apply component names to all data-bind elements ── */
+    /* ── Apply component names and links from components.js ── */
     document.addEventListener('DOMContentLoaded', () => {
+      // Bind component names
       Object.entries(COMPONENTS).forEach(([key, value]) => {
         document.querySelectorAll(`[data-bind="${key}"]`).forEach(el => {
           el.textContent = value;
+        });
+      });
+
+      // Bind useful links
+      Object.entries(LINKS).forEach(([key, cfg]) => {
+        document.querySelectorAll(`[data-link="${key}"]`).forEach(el => {
+          el.href = cfg.url;
+          el.querySelector('.link-emoji').textContent = cfg.emoji;
+          el.querySelector('span:last-child').textContent = cfg.label;
         });
       });
     });
