@@ -1063,6 +1063,46 @@
 
     </div>
 
+    <!-- Error description -->
+    <div class="section">
+      <div class="section-title-row">
+        <div class="section-title">Error description</div>
+        <a href="#" class="splunk-link">&#9776; View logs in Splunk</a>
+      </div>
+      <div class="error-description">
+        <div class="error-message">java.lang.NullPointerException in <span data-bind="currentComponent"></span>: Cannot invoke method getAmount() on null reference</div>
+        <div class="error-detail">
+          The <code>transaction</code> object passed to <code>processTransaction()</code> was <code>null</code>.
+          This is likely caused by a race condition in the <code data-bind="currentComponent"></code> queue consumer — the transaction record
+          is being fetched before it's committed to the <code data-bind="transactionDb"></code>. First observed after deploy <strong>v2.14.1</strong> (Feb 9, 14:12 UTC).
+        </div>
+      </div>
+    </div>
+
+    <!-- Stacktrace -->
+    <div class="section">
+      <div class="section-title-row">
+        <div class="section-title">Stacktrace</div>
+        <a href="#" class="splunk-link">&#9776; View logs in Splunk</a>
+      </div>
+      <div class="stacktrace-wrapper">
+        <div class="stacktrace-header">
+          <span>java.lang.NullPointerException</span>
+          <button class="copy-btn" onclick="navigator.clipboard.writeText(document.querySelector('.stacktrace').innerText)">
+            &#128203; Copy
+          </button>
+        </div>
+        <pre class="stacktrace"><span class="line-num"> 1</span><span class="error-line">java.lang.NullPointerException: Cannot invoke method getAmount() on null reference</span>
+<span class="line-num"> 2</span>    at <span class="highlight">com.app.payment.<span data-bind="currentComponent"></span>.processTransaction(<span data-bind="currentComponent"></span>.java:142)</span>
+<span class="line-num"> 3</span>    at com.app.payment.<span data-bind="currentComponent"></span>.handlePayment(<span class="file-ref"><span data-bind="currentComponent"></span>.java:89</span>)
+<span class="line-num"> 4</span>    at com.app.payment.PaymentQueueConsumer.onMessage(<span class="file-ref">PaymentQueueConsumer.java:67</span>)
+<span class="line-num"> 5</span>    at com.app.messaging.KafkaConsumerWrapper.poll(<span class="file-ref">KafkaConsumerWrapper.java:134</span>)
+<span class="line-num"> 6</span>    <span class="dimmed">at org.apache.kafka.clients.consumer.KafkaConsumer.poll(KafkaConsumer.java:1244)</span>
+<span class="line-num"> 7</span>    <span class="dimmed">at org.apache.kafka.clients.consumer.KafkaConsumer.poll(KafkaConsumer.java:1206)</span>
+<span class="line-num"> 8</span>    <span class="dimmed">at java.base/java.lang.Thread.run(Thread.java:829)</span></pre>
+      </div>
+    </div>
+
     <!-- Occurrences comparison -->
     <div class="section">
       <div class="occurrences">
@@ -1107,46 +1147,6 @@
           <div class="compare-change neutral">baseline</div>
         </div>
 
-      </div>
-    </div>
-
-    <!-- Error description -->
-    <div class="section">
-      <div class="section-title-row">
-        <div class="section-title">Error description</div>
-        <a href="#" class="splunk-link">&#9776; View logs in Splunk</a>
-      </div>
-      <div class="error-description">
-        <div class="error-message">java.lang.NullPointerException in <span data-bind="currentComponent"></span>: Cannot invoke method getAmount() on null reference</div>
-        <div class="error-detail">
-          The <code>transaction</code> object passed to <code>processTransaction()</code> was <code>null</code>.
-          This is likely caused by a race condition in the <code data-bind="currentComponent"></code> queue consumer — the transaction record
-          is being fetched before it's committed to the <code data-bind="transactionDb"></code>. First observed after deploy <strong>v2.14.1</strong> (Feb 9, 14:12 UTC).
-        </div>
-      </div>
-    </div>
-
-    <!-- Stacktrace -->
-    <div class="section">
-      <div class="section-title-row">
-        <div class="section-title">Stacktrace</div>
-        <a href="#" class="splunk-link">&#9776; View logs in Splunk</a>
-      </div>
-      <div class="stacktrace-wrapper">
-        <div class="stacktrace-header">
-          <span>java.lang.NullPointerException</span>
-          <button class="copy-btn" onclick="navigator.clipboard.writeText(document.querySelector('.stacktrace').innerText)">
-            &#128203; Copy
-          </button>
-        </div>
-        <pre class="stacktrace"><span class="line-num"> 1</span><span class="error-line">java.lang.NullPointerException: Cannot invoke method getAmount() on null reference</span>
-<span class="line-num"> 2</span>    at <span class="highlight">com.app.payment.<span data-bind="currentComponent"></span>.processTransaction(<span data-bind="currentComponent"></span>.java:142)</span>
-<span class="line-num"> 3</span>    at com.app.payment.<span data-bind="currentComponent"></span>.handlePayment(<span class="file-ref"><span data-bind="currentComponent"></span>.java:89</span>)
-<span class="line-num"> 4</span>    at com.app.payment.PaymentQueueConsumer.onMessage(<span class="file-ref">PaymentQueueConsumer.java:67</span>)
-<span class="line-num"> 5</span>    at com.app.messaging.KafkaConsumerWrapper.poll(<span class="file-ref">KafkaConsumerWrapper.java:134</span>)
-<span class="line-num"> 6</span>    <span class="dimmed">at org.apache.kafka.clients.consumer.KafkaConsumer.poll(KafkaConsumer.java:1244)</span>
-<span class="line-num"> 7</span>    <span class="dimmed">at org.apache.kafka.clients.consumer.KafkaConsumer.poll(KafkaConsumer.java:1206)</span>
-<span class="line-num"> 8</span>    <span class="dimmed">at java.base/java.lang.Thread.run(Thread.java:829)</span></pre>
       </div>
     </div>
 
