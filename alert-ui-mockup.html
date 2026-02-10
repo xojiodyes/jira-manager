@@ -1060,7 +1060,7 @@
         <span class="alert-time">Feb 9, 2026 at 14:32 UTC</span>
       </div>
 
-      <h1 class="alert-title">NullPointerException in PaymentService.processTransaction()</h1>
+      <h1 class="alert-title">NullPointerException in <span data-bind="currentComponent"></span>.processTransaction()</h1>
 
       <div class="alert-component">
         <span class="icon">&#9649;</span>
@@ -1140,8 +1140,8 @@
         <div class="error-message">java.lang.NullPointerException: Cannot invoke method getAmount() on null reference</div>
         <div class="error-detail">
           The <code>transaction</code> object passed to <code>processTransaction()</code> was <code>null</code>.
-          This is likely caused by a race condition in the payment queue consumer — the transaction record
-          is being fetched before it's committed to the database. First observed after deploy <strong>v2.14.1</strong> (Feb 9, 14:12 UTC).
+          This is likely caused by a race condition in the <code data-bind="currentComponent"></code> queue consumer — the transaction record
+          is being fetched before it's committed to the <code data-bind="transactionDb"></code>. First observed after deploy <strong>v2.14.1</strong> (Feb 9, 14:12 UTC).
         </div>
       </div>
     </div>
@@ -1160,8 +1160,8 @@
           </button>
         </div>
         <pre class="stacktrace"><span class="line-num"> 1</span><span class="error-line">java.lang.NullPointerException: Cannot invoke method getAmount() on null reference</span>
-<span class="line-num"> 2</span>    at <span class="highlight">com.app.payment.PaymentService.processTransaction(PaymentService.java:142)</span>
-<span class="line-num"> 3</span>    at com.app.payment.PaymentService.handlePayment(<span class="file-ref">PaymentService.java:89</span>)
+<span class="line-num"> 2</span>    at <span class="highlight">com.app.payment.<span data-bind="currentComponent"></span>.processTransaction(<span data-bind="currentComponent"></span>.java:142)</span>
+<span class="line-num"> 3</span>    at com.app.payment.<span data-bind="currentComponent"></span>.handlePayment(<span class="file-ref"><span data-bind="currentComponent"></span>.java:89</span>)
 <span class="line-num"> 4</span>    at com.app.payment.PaymentQueueConsumer.onMessage(<span class="file-ref">PaymentQueueConsumer.java:67</span>)
 <span class="line-num"> 5</span>    at com.app.messaging.KafkaConsumerWrapper.poll(<span class="file-ref">KafkaConsumerWrapper.java:134</span>)
 <span class="line-num"> 6</span>    <span class="dimmed">at org.apache.kafka.clients.consumer.KafkaConsumer.poll(KafkaConsumer.java:1244)</span>
@@ -1186,7 +1186,7 @@
             <div class="related-item">
               <span class="dot resolved"></span>
               <div class="related-info">
-                <div class="related-title">NullPointerException in PaymentService.processRefund()</div>
+                <div class="related-title">NullPointerException in <span data-bind="currentComponent"></span>.processRefund()</div>
                 <div class="related-meta">Same error pattern &middot; resolved Feb 3</div>
               </div>
               <span class="related-component" data-bind="currentComponent"></span>
@@ -1196,11 +1196,11 @@
             <div class="expand-panel">
               <div class="expand-card">
                 <div class="expand-label">Root cause</div>
-                <div class="expand-text">Race condition between Kafka consumer and DB write. The <code>findById()</code> call returned <code>null</code> because the transaction wasn't committed yet when the event was processed.</div>
+                <div class="expand-text">Race condition between Kafka consumer and <code data-bind="transactionDb"></code> write. The <code>findById()</code> call returned <code>null</code> because the transaction wasn't committed yet when the event was processed.</div>
               </div>
               <div class="expand-card">
                 <div class="expand-label">Resolution</div>
-                <div class="expand-text">Added a retry mechanism with exponential backoff (3 attempts, 200ms base delay) in <code>PaymentQueueConsumer</code>. Also added a null-check guard in <code>processRefund()</code>.</div>
+                <div class="expand-text">Added a retry mechanism with exponential backoff (3 attempts, 200ms base delay) in <code data-bind="currentComponent"></code> queue consumer. Also added a null-check guard in <code>processRefund()</code>.</div>
                 <div class="resolution-tag">&#10003; Fixed in v2.13.4</div>
               </div>
             </div>
@@ -1210,7 +1210,7 @@
             <div class="related-item">
               <span class="dot resolved"></span>
               <div class="related-info">
-                <div class="related-title">NullPointerException in OrderService.confirmPayment()</div>
+                <div class="related-title">NullPointerException in <span data-bind="orderService"></span>.confirmPayment()</div>
                 <div class="related-meta">Similar pattern &middot; resolved Jan 18</div>
               </div>
               <span class="related-component" data-bind="orderService"></span>
@@ -1220,7 +1220,7 @@
             <div class="expand-panel">
               <div class="expand-card">
                 <div class="expand-label">Root cause</div>
-                <div class="expand-text">Payment confirmation callback arrived before the order record was persisted. Async event ordering issue between <code data-bind="orderService"></code> and <code data-bind="currentComponent"></code>.</div>
+                <div class="expand-text">Payment confirmation callback arrived before the order record was persisted. Async event ordering issue between <code data-bind="orderService"></code> and <code data-bind="currentComponent"></code>. Data inconsistency in <code data-bind="transactionDb"></code>.</div>
               </div>
               <div class="expand-card">
                 <div class="expand-label">Resolution</div>
@@ -1234,7 +1234,7 @@
             <div class="related-item">
               <span class="dot resolved"></span>
               <div class="related-info">
-                <div class="related-title">NullPointerException in PaymentService.processTransaction()</div>
+                <div class="related-title">NullPointerException in <span data-bind="currentComponent"></span>.processTransaction()</div>
                 <div class="related-meta">Exact same error &middot; resolved Dec 12</div>
               </div>
               <span class="related-component" data-bind="currentComponent"></span>
@@ -1244,11 +1244,11 @@
             <div class="expand-panel">
               <div class="expand-card">
                 <div class="expand-label">Root cause</div>
-                <div class="expand-text">Database connection pool exhaustion during peak load caused <code>findById()</code> to return null instead of throwing a timeout. Connection pool was set to 10 (too low for traffic volume).</div>
+                <div class="expand-text"><code data-bind="transactionDb"></code> connection pool exhaustion during peak load caused <code>findById()</code> to return null instead of throwing a timeout. Connection pool was set to 10 (too low for traffic volume).</div>
               </div>
               <div class="expand-card">
                 <div class="expand-label">Resolution</div>
-                <div class="expand-text">Increased connection pool to 50. Added proper exception handling in the repository layer to throw <code>TransactionNotFoundException</code> instead of returning null.</div>
+                <div class="expand-text">Increased <code data-bind="transactionDb"></code> connection pool to 50. Added proper exception handling in the <code data-bind="currentComponent"></code> repository layer to throw <code>TransactionNotFoundException</code> instead of returning null.</div>
                 <div class="resolution-tag">&#10003; Fixed in v2.11.2</div>
               </div>
             </div>
@@ -1274,7 +1274,7 @@
               <input type="checkbox" class="related-checkbox alert-checkbox" data-group="open-same-list" onclick="event.stopPropagation(); updateBulkToolbar()" >
               <span class="dot critical"></span>
               <div class="related-info">
-                <div class="related-title">NullPointerException in PaymentService.processTransaction()</div>
+                <div class="related-title">NullPointerException in <span data-bind="currentComponent"></span>.processTransaction()</div>
                 <div class="related-meta">Same error &middot; host: pay-prod-01 &middot; 1 hour ago</div>
               </div>
               <span class="related-component" data-bind="currentComponent"></span>
