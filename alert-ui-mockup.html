@@ -462,6 +462,25 @@
       white-space: nowrap;
     }
 
+    .related-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      color: #bbb;
+      font-size: 13px;
+      text-decoration: none;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+
+    .related-link:hover {
+      background: #f0f0f0;
+      color: #4f6df5;
+    }
+
     .related-chevron {
       color: #ccc;
       font-size: 14px;
@@ -1191,6 +1210,7 @@
               </div>
               <span class="related-component" data-bind="currentComponent"></span>
               <span class="related-count">1.2k occ.</span>
+              <a href="#" class="related-link" title="Open alert" onclick="event.stopPropagation()">&#8599;</a>
               <span class="related-chevron">&rsaquo;</span>
             </div>
             <div class="expand-panel">
@@ -1215,6 +1235,7 @@
               </div>
               <span class="related-component" data-bind="orderService"></span>
               <span class="related-count">678 occ.</span>
+              <a href="#" class="related-link" title="Open alert" onclick="event.stopPropagation()">&#8599;</a>
               <span class="related-chevron">&rsaquo;</span>
             </div>
             <div class="expand-panel">
@@ -1239,6 +1260,7 @@
               </div>
               <span class="related-component" data-bind="currentComponent"></span>
               <span class="related-count">2.4k occ.</span>
+              <a href="#" class="related-link" title="Open alert" onclick="event.stopPropagation()">&#8599;</a>
               <span class="related-chevron">&rsaquo;</span>
             </div>
             <div class="expand-panel">
