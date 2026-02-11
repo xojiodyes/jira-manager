@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teams Alert Detail — Log Monitor</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+      background: #fafafa;
+      color: #1a1a1a;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Top bar ── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 32px;
+      border-bottom: 1px solid #e5e5e5;
+      background: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: #888;
+    }
+
+    .breadcrumb a {
+      color: #888;
+      text-decoration: none;
+    }
+
+    .breadcrumb a:hover {
+      color: #1a1a1a;
+    }
+
+    .breadcrumb .sep {
+      color: #ccc;
+    }
+
+    .breadcrumb .current {
+      color: #1a1a1a;
+      font-weight: 500;
+    }
+
+    .topbar-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid #e0e0e0;
+      background: #fff;
+      color: #555;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn:hover {
+      background: #f5f5f5;
+      border-color: #ccc;
+    }
+
+    .btn-primary {
+      background: #1a1a1a;
+      color: #fff;
+      border-color: #1a1a1a;
+    }
+
+    .btn-primary:hover {
+      background: #333;
+    }
+
+    /* ── Main layout ── */
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 40px 32px 100px;
+    }
+
+    /* ── Severity badge ── */
+    .severity-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .severity-critical {
+      background: #fef2f2;
+      color: #dc2626;
+      border: 1px solid #fecaca;
+    }
+
+    .severity-warning {
+      background: #fffbeb;
+      color: #d97706;
+      border: 1px solid #fde68a;
+    }
+
+    .severity-info {
+      background: #eff6ff;
+      color: #2563eb;
+      border: 1px solid #bfdbfe;
+    }
+
+    .severity-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* ── Header ── */
+    .alert-header {
+      margin-bottom: 32px;
+    }
+
+    .alert-header-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .alert-id {
+      font-size: 13px;
+      color: #999;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    .alert-time {
+      font-size: 13px;
+      color: #999;
+      margin-left: auto;
+    }
+
+    .alert-title {
+      font-size: 22px;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-bottom: 12px;
+      line-height: 1.3;
+    }
+
+    /* ── Alert chips (channel + author) ── */
+    .alert-chips {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .channel-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: #7c3aed;
+      background: #f5f3ff;
+      padding: 5px 12px;
+      border-radius: 6px;
+      border: 1px solid #e9d5ff;
+      font-weight: 500;
+    }
+
+    .channel-chip .chip-icon {
+      font-size: 14px;
+      opacity: 0.7;
+    }
+
+    .author-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #555;
+      background: #f3f3f3;
+      padding: 4px 12px 4px 4px;
+      border-radius: 6px;
+    }
+
+    .author-chip .chip-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #e5e5e5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 600;
+      color: #666;
+      flex-shrink: 0;
+    }
+
+    .msg-count-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 13px;
+      color: #888;
+      background: #f3f3f3;
+      padding: 5px 12px;
+      border-radius: 6px;
+    }
+
+    /* ── Sections ── */
+    .section {
+      margin-bottom: 28px;
+    }
+
+    .section-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #aaa;
+      margin-bottom: 10px;
+    }
+
+    .section-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .section-title-row .section-title {
+      margin-bottom: 0;
+    }
+
+    /* ── Teams link ── */
+    .teams-link {
+      font-size: 12px;
+      color: #7c3aed;
+      text-decoration: none;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: color 0.15s;
+    }
+
+    .teams-link:hover {
+      color: #6d28d9;
+      text-decoration: underline;
+    }
+
+    .splunk-link {
+      font-size: 12px;
+      color: #4f6df5;
+      text-decoration: none;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: color 0.15s;
+    }
+
+    .splunk-link:hover {
+      color: #3451d1;
+      text-decoration: underline;
+    }
+
+    /* ── Thread container ── */
+    .thread-container {
+      background: #fff;
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .thread-message {
+      padding: 16px 20px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .thread-message:last-child {
+      border-bottom: none;
+    }
+
+    .thread-message-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .thread-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #e5e5e5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: #666;
+      flex-shrink: 0;
+    }
+
+    .thread-avatar.purple { background: #ede9fe; color: #7c3aed; }
+    .thread-avatar.blue   { background: #dbeafe; color: #2563eb; }
+    .thread-avatar.green  { background: #dcfce7; color: #16a34a; }
+
+    .thread-author {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+
+    .thread-time {
+      font-size: 12px;
+      color: #999;
+      margin-left: auto;
+    }
+
+    .thread-text {
+      font-size: 14px;
+      color: #444;
+      line-height: 1.6;
+      padding-left: 42px;
+    }
+
+    .thread-text code {
+      background: #f3f3f3;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      color: #d63384;
+    }
+
+    .thread-text .mention {
+      color: #7c3aed;
+      font-weight: 500;
+    }
+
+    .thread-footer {
+      padding: 12px 20px;
+      background: #fafafa;
+      border-top: 1px solid #f0f0f0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    /* ── Summary card ── */
+    .summary-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 20px;
+    }
+
+    .summary-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .summary-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: #ede9fe;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .summary-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+
+    .summary-badge {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #7c3aed;
+      background: #ede9fe;
+      padding: 2px 8px;
+      border-radius: 100px;
+      margin-left: 4px;
+    }
+
+    .summary-text {
+      font-size: 14px;
+      color: #555;
+      line-height: 1.7;
+      margin-bottom: 16px;
+    }
+
+    .summary-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .summary-meta-item {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .summary-meta-label {
+      color: #999;
+      font-weight: 500;
+      flex-shrink: 0;
+      min-width: 110px;
+    }
+
+    .summary-meta-value {
+      color: #555;
+    }
+
+    .summary-meta-value code {
+      background: #e2e8f0;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      color: #1a1a1a;
+    }
+
+    /* ── Related log alerts ── */
+    .related-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      background: #e5e5e5;
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .related-item {
+      display: flex;
+      align-items: center;
+      padding: 14px 16px;
+      background: #fff;
+      cursor: pointer;
+      transition: background 0.1s;
+      gap: 12px;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .related-item:hover {
+      background: #f9f9f9;
+    }
+
+    .related-item .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .related-item .dot.critical { background: #ef4444; }
+    .related-item .dot.warning { background: #f59e0b; }
+    .related-item .dot.resolved { background: #22c55e; }
+
+    .related-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .related-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: #1a1a1a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .related-meta {
+      font-size: 12px;
+      color: #999;
+      margin-top: 2px;
+    }
+
+    .related-component {
+      font-size: 12px;
+      color: #888;
+      background: #f3f3f3;
+      padding: 2px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    .related-count {
+      font-size: 12px;
+      color: #999;
+      white-space: nowrap;
+    }
+
+    .related-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      color: #bbb;
+      font-size: 13px;
+      text-decoration: none;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+
+    .related-link:hover {
+      background: #f0f0f0;
+      color: #4f6df5;
+    }
+
+    .related-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .related-section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+
+    .related-section-count {
+      font-size: 12px;
+      color: #999;
+      background: #f3f3f3;
+      padding: 2px 8px;
+      border-radius: 100px;
+      margin-left: 8px;
+    }
+
+    /* ── Useful links ── */
+    .useful-links {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .useful-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      background: #fff;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #555;
+      text-decoration: none;
+      transition: all 0.15s;
+    }
+
+    .useful-link:hover {
+      border-color: #ccc;
+      color: #1a1a1a;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+
+    .useful-link .link-emoji {
+      font-size: 14px;
+    }
+
+    /* ── Status indicator ── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: #fef2f2;
+      border-radius: 8px;
+      margin-bottom: 24px;
+    }
+
+    .status-pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ef4444;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .status-text {
+      font-size: 13px;
+      color: #991b1b;
+      font-weight: 500;
+    }
+
+    .status-time {
+      margin-left: auto;
+      font-size: 12px;
+      color: #b91c1c;
+    }
+
+    /* ── Assign to (topbar) ── */
+    .assign-topbar {
+      position: relative;
+    }
+
+    .assign-topbar:hover {
+      background: #faf5ff;
+      border-color: #e9d5ff;
+      color: #7c3aed;
+    }
+
+    .assign-topbar.active {
+      background: #7c3aed;
+      border-color: #7c3aed;
+      color: #fff;
+    }
+
+    .assign-dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+      z-index: 20;
+      overflow: hidden;
+    }
+
+    .assign-dropdown.open {
+      display: block;
+    }
+
+    .assign-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #333;
+      cursor: pointer;
+      transition: background 0.1s;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+    }
+
+    .assign-option:hover {
+      background: #f5f5f5;
+    }
+
+    .assign-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #e5e5e5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: #666;
+      flex-shrink: 0;
+    }
+
+    /* ── Fixed bottom-right action panel ── */
+    .fixed-actions {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      gap: 8px;
+      z-index: 100;
+      background: #fff;
+      padding: 8px;
+      border-radius: 12px;
+      border: 1px solid #e5e5e5;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.06);
+    }
+
+    .fixed-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      border: 1px solid #e0e0e0;
+      background: #fff;
+      color: #555;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .fixed-btn:hover {
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+
+    .fixed-btn .action-icon {
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .fixed-btn.active {
+      border-color: transparent;
+      color: #fff;
+    }
+
+    .fixed-btn.no-impact:hover {
+      background: #f0fdf4;
+      border-color: #bbf7d0;
+      color: #16a34a;
+    }
+    .fixed-btn.no-impact.active {
+      background: #16a34a;
+    }
+
+    .fixed-btn.has-impact:hover {
+      background: #fef2f2;
+      border-color: #fecaca;
+      color: #dc2626;
+    }
+    .fixed-btn.has-impact.active {
+      background: #dc2626;
+    }
+
+    .fixed-btn.noise:hover {
+      background: #f5f5f5;
+      border-color: #d4d4d4;
+      color: #737373;
+    }
+    .fixed-btn.noise.active {
+      background: #737373;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <nav class="breadcrumb">
+        <a href="#">Alerts</a>
+        <span class="sep">/</span>
+        <a href="#">Teams</a>
+        <span class="sep">/</span>
+        <span class="current" data-bind="teamsAlertId"></span>
+      </nav>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn assign-topbar" onclick="toggleAssign(event, this)">
+        <span>&#128100;</span>
+        <span class="assign-label">Assign to...</span>
+        <div class="assign-dropdown" onclick="event.stopPropagation()">
+          <div class="assign-option" onclick="assignTo(event, 'AS', 'Alex Sokolov')">
+            <span class="assign-avatar">AS</span> Alex Sokolov
+          </div>
+          <div class="assign-option" onclick="assignTo(event, 'MK', 'Maria Kim')">
+            <span class="assign-avatar">MK</span> Maria Kim
+          </div>
+          <div class="assign-option" onclick="assignTo(event, 'DV', 'Dmitry Volkov')">
+            <span class="assign-avatar">DV</span> Dmitry Volkov
+          </div>
+          <div class="assign-option" onclick="assignTo(event, 'ME', 'Me')">
+            <span class="assign-avatar">ME</span> Assign to me
+          </div>
+        </div>
+      </button>
+      <button class="btn btn-primary">&#128065; Acknowledge</button>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <!-- Status bar -->
+    <div class="status-bar">
+      <div class="status-pulse"></div>
+      <span class="status-text">Active — conversation is ongoing</span>
+      <span class="status-time">Last message 5 min ago</span>
+    </div>
+
+    <!-- Header -->
+    <div class="alert-header">
+      <div class="alert-header-top">
+        <span class="severity-badge severity-critical">
+          <span class="severity-dot"></span>
+          Critical
+        </span>
+        <span class="alert-id" data-bind="teamsAlertId"></span>
+        <span class="alert-time">Feb 11, 2026 at 15:20 UTC</span>
+      </div>
+
+      <h1 class="alert-title">Payments failing in production — error rate 45%</h1>
+
+      <div class="alert-chips">
+        <span class="channel-chip">
+          <span class="chip-icon">&#9783;</span>
+          <span data-bind="channelIncidents"></span>
+        </span>
+        <span class="author-chip">
+          <span class="chip-avatar">AS</span>
+          Started by Alex Sokolov
+        </span>
+        <span class="msg-count-chip">
+          &#128172; 6 messages
+        </span>
+      </div>
+    </div>
+
+    <!-- Teams conversation -->
+    <div class="section">
+      <div class="section-title-row">
+        <div class="section-title">Conversation</div>
+        <a href="#" class="teams-link">&#9783; Open in Teams &#8599;</a>
+      </div>
+      <div class="thread-container">
+
+        <div class="thread-message">
+          <div class="thread-message-header">
+            <span class="thread-avatar purple">AS</span>
+            <span class="thread-author">Alex Sokolov</span>
+            <span class="thread-time">15:20 UTC</span>
+          </div>
+          <div class="thread-text">
+            <span class="mention">@channel</span> Payments are failing on prod. Error rate jumped to 45% in the last 10 minutes. <code data-bind="currentComponent"></code> is returning 500s on all <code>processTransaction()</code> calls.
+          </div>
+        </div>
+
+        <div class="thread-message">
+          <div class="thread-message-header">
+            <span class="thread-avatar blue">MK</span>
+            <span class="thread-author">Maria Kim</span>
+            <span class="thread-time">15:24 UTC</span>
+          </div>
+          <div class="thread-text">
+            Looking into it. Seeing NullPointerException in the logs — same pattern as last time. Might be related to this morning's deploy of <code>v2.14.1</code>.
+          </div>
+        </div>
+
+        <div class="thread-message">
+          <div class="thread-message-header">
+            <span class="thread-avatar green">DV</span>
+            <span class="thread-author">Dmitry Volkov</span>
+            <span class="thread-time">15:31 UTC</span>
+          </div>
+          <div class="thread-text">
+            Confirmed — connection pool on <code data-bind="transactionDb"></code> is exhausted. 50/50 connections used. Queries are timing out and <code>findById()</code> returns null, which causes the NPE in <code data-bind="currentComponent"></code>.
+          </div>
+        </div>
+
+        <div class="thread-message">
+          <div class="thread-message-header">
+            <span class="thread-avatar purple">AS</span>
+            <span class="thread-author">Alex Sokolov</span>
+            <span class="thread-time">15:38 UTC</span>
+          </div>
+          <div class="thread-text">
+            Rolling back to <code>v2.14.0</code> now. <span class="mention">@dmitry</span> can you increase the connection pool size on <code data-bind="transactionDb"></code> while I handle the rollback?
+          </div>
+        </div>
+
+        <div class="thread-message">
+          <div class="thread-message-header">
+            <span class="thread-avatar green">DV</span>
+            <span class="thread-author">Dmitry Volkov</span>
+            <span class="thread-time">15:42 UTC</span>
+          </div>
+          <div class="thread-text">
+            Pool increased to 100 on <code data-bind="transactionDb"></code>. Monitoring — connections are starting to free up.
+          </div>
+        </div>
+
+        <div class="thread-message">
+          <div class="thread-message-header">
+            <span class="thread-avatar blue">MK</span>
+            <span class="thread-author">Maria Kim</span>
+            <span class="thread-time">15:55 UTC</span>
+          </div>
+          <div class="thread-text">
+            Error rate is dropping. Down to 12% now and falling. Rollback to <code>v2.14.0</code> seems to be working. Will keep monitoring for the next 30 minutes.
+          </div>
+        </div>
+
+        <div class="thread-footer">
+          <a href="#" class="teams-link">&#9783; Open full thread in Teams &#8599;</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Summary -->
+    <div class="section">
+      <div class="section-title">Summary</div>
+      <div class="summary-card">
+        <div class="summary-header">
+          <span class="summary-icon">&#9670;</span>
+          <span class="summary-label">Auto-generated summary</span>
+          <span class="summary-badge">AI</span>
+        </div>
+        <div class="summary-text">
+          <code data-bind="currentComponent"></code> error rate spiked to 45% after deploy <code>v2.14.1</code>.
+          Root cause identified as connection pool exhaustion on <code data-bind="transactionDb"></code> (50/50 connections),
+          causing <code>findById()</code> to return null and triggering NullPointerException.
+          Team rolled back to <code>v2.14.0</code> and increased pool size to 100. Error rate is decreasing (12% and falling).
+        </div>
+        <div class="summary-meta">
+          <div class="summary-meta-item">
+            <span class="summary-meta-label">Components</span>
+            <span class="summary-meta-value"><code data-bind="currentComponent"></code>, <code data-bind="transactionDb"></code></span>
+          </div>
+          <div class="summary-meta-item">
+            <span class="summary-meta-label">Action taken</span>
+            <span class="summary-meta-value">Rollback to v2.14.0 + connection pool increase to 100</span>
+          </div>
+          <div class="summary-meta-item">
+            <span class="summary-meta-label">Current status</span>
+            <span class="summary-meta-value">Error rate decreasing, monitoring in progress</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Related log alerts -->
+    <div class="section">
+      <div class="related-section-header">
+        <div>
+          <span class="related-section-title">Related log alerts</span>
+          <span class="related-section-count">2</span>
+        </div>
+      </div>
+      <div class="related-list">
+        <a href="alert-ui-mockup.html" class="related-item">
+          <span class="dot critical"></span>
+          <div class="related-info">
+            <div class="related-title">NullPointerException in <span data-bind="currentComponent"></span>.processTransaction()</div>
+            <div class="related-meta"><span data-bind="alertId"></span> &middot; active &middot; 847 occurrences today</div>
+          </div>
+          <span class="related-component" data-bind="currentComponent"></span>
+          <span class="related-link">&#8599;</span>
+        </a>
+        <a href="#" class="related-item">
+          <span class="dot warning"></span>
+          <div class="related-info">
+            <div class="related-title">TimeoutException in <span data-bind="transactionDb"></span>.findById()</div>
+            <div class="related-meta">ALR-4819 &middot; active &middot; 89 occurrences today</div>
+          </div>
+          <span class="related-component" data-bind="transactionDb"></span>
+          <span class="related-link">&#8599;</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Useful links -->
+    <div class="section">
+      <div class="section-title">Useful links</div>
+      <div class="useful-links">
+        <a href="#" class="useful-link">
+          <span class="link-emoji">&#9776;</span> Splunk Logs
+        </a>
+        <a href="#" class="useful-link" data-link="hosting">
+          <span class="link-emoji"></span> <span></span>
+        </a>
+        <a href="#" class="useful-link" data-link="cicd">
+          <span class="link-emoji"></span> <span></span>
+        </a>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Fixed bottom-right action panel -->
+  <div class="fixed-actions">
+    <button class="fixed-btn no-impact" onclick="selectFixedAction(this)">
+      <span class="action-icon">&#10003;</span>
+      No Impact
+    </button>
+    <button class="fixed-btn has-impact" onclick="selectFixedAction(this)">
+      <span class="action-icon">&#9888;</span>
+      Has Impact
+    </button>
+    <button class="fixed-btn noise" onclick="selectFixedAction(this)">
+      <span class="action-icon">&#128263;</span>
+      It's Noise
+    </button>
+  </div>
+
+  <script src="components.js"></script>
+  <script>
+    /* ── Apply bindings from components.js ── */
+    document.addEventListener('DOMContentLoaded', () => {
+      // Teams-alert specific constants
+      const TEAMS_ALERT = {
+        teamsAlertId:     'TAL-1092',
+        channelIncidents: TEAMS_CHANNELS.incidents,
+      };
+
+      // Merge all bindable constants
+      const allBindings = { ...COMPONENTS, ...TEAMS_ALERT };
+
+      // Bind component names
+      Object.entries(allBindings).forEach(([key, value]) => {
+        document.querySelectorAll(`[data-bind="${key}"]`).forEach(el => {
+          el.textContent = value;
+        });
+      });
+
+      // Bind useful links
+      Object.entries(LINKS).forEach(([key, cfg]) => {
+        document.querySelectorAll(`[data-link="${key}"]`).forEach(el => {
+          el.href = cfg.url;
+          el.querySelector('.link-emoji').textContent = cfg.emoji;
+          el.querySelector('span:last-child').textContent = cfg.label;
+        });
+      });
+    });
+
+    /* ── Fixed bottom-right buttons ── */
+    function selectFixedAction(btn) {
+      document.querySelectorAll('.fixed-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+
+    function toggleAssign(e, btn) {
+      e.stopPropagation();
+      btn.querySelector('.assign-dropdown').classList.toggle('open');
+    }
+
+    function assignTo(e, initials, name) {
+      e.stopPropagation();
+      const btn = document.querySelector('.assign-topbar');
+      btn.querySelector('.assign-label').textContent = name;
+      btn.classList.add('active');
+      btn.querySelector('.assign-dropdown').classList.remove('open');
+    }
+
+    document.addEventListener('click', () => {
+      document.querySelector('.assign-dropdown').classList.remove('open');
+    });
+  </script>
+
+</body>
+</html>

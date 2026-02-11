@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teams Alerts — Log Monitor</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+      background: #fafafa;
+      color: #1a1a1a;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Top bar ── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 32px;
+      border-bottom: 1px solid #e5e5e5;
+      background: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: #888;
+    }
+
+    .breadcrumb a {
+      color: #888;
+      text-decoration: none;
+    }
+
+    .breadcrumb a:hover {
+      color: #1a1a1a;
+    }
+
+    .breadcrumb .sep {
+      color: #ccc;
+    }
+
+    .breadcrumb .current {
+      color: #1a1a1a;
+      font-weight: 500;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid #e0e0e0;
+      background: #fff;
+      color: #555;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn:hover {
+      background: #f5f5f5;
+      border-color: #ccc;
+    }
+
+    .btn-primary {
+      background: #1a1a1a;
+      color: #fff;
+      border-color: #1a1a1a;
+    }
+
+    .btn-primary:hover {
+      background: #333;
+    }
+
+    /* ── Main layout ── */
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 32px 32px 100px;
+    }
+
+    /* ── Page header ── */
+    .page-header {
+      margin-bottom: 24px;
+    }
+
+    .page-title {
+      font-size: 22px;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-bottom: 6px;
+    }
+
+    .page-subtitle {
+      font-size: 14px;
+      color: #888;
+    }
+
+    /* ── Summary bar ── */
+    .summary-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 16px;
+      background: #fff;
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
+
+    .summary-stat {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: #555;
+    }
+
+    .summary-stat .stat-value {
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+
+    .summary-stat .stat-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .summary-stat .stat-dot.critical { background: #ef4444; }
+    .summary-stat .stat-dot.warning { background: #f59e0b; }
+    .summary-stat .stat-dot.new { background: #3b82f6; }
+
+    .summary-sep {
+      width: 1px;
+      height: 20px;
+      background: #e5e5e5;
+    }
+
+    /* ── Status tabs ── */
+    .status-tabs {
+      display: flex;
+      gap: 2px;
+      margin-bottom: 16px;
+      background: #f0f0f0;
+      border-radius: 8px;
+      padding: 3px;
+      width: fit-content;
+    }
+
+    .status-tab {
+      padding: 6px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #888;
+      cursor: pointer;
+      transition: all 0.15s;
+      border: none;
+      background: transparent;
+    }
+
+    .status-tab:hover {
+      color: #555;
+    }
+
+    .status-tab.active {
+      background: #fff;
+      color: #1a1a1a;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .tab-count {
+      font-size: 11px;
+      color: #999;
+      background: #f0f0f0;
+      padding: 1px 6px;
+      border-radius: 100px;
+      margin-left: 4px;
+    }
+
+    .status-tab.active .tab-count {
+      background: #eee;
+      color: #666;
+    }
+
+    /* ── Alert table ── */
+    .alert-table {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      background: #e5e5e5;
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    /* ── Select all row ── */
+    .select-all-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 16px;
+      background: #fafafa;
+      border-bottom: 1px solid #e5e5e5;
+      font-size: 12px;
+      color: #888;
+    }
+
+    .select-all-label {
+      font-size: 12px;
+      color: #888;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    /* ── Checkbox ── */
+    .alert-checkbox {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      border: 1.5px solid #d4d4d4;
+      background: #fff;
+      cursor: pointer;
+      flex-shrink: 0;
+      appearance: none;
+      -webkit-appearance: none;
+      position: relative;
+      transition: all 0.15s;
+    }
+
+    .alert-checkbox:checked {
+      background: #1a1a1a;
+      border-color: #1a1a1a;
+    }
+
+    .alert-checkbox:checked::after {
+      content: '\2713';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .alert-checkbox:hover {
+      border-color: #999;
+    }
+
+    /* ── Table row ── */
+    .alert-row-wrapper {
+      background: #fff;
+    }
+
+    .alert-row {
+      display: flex;
+      align-items: center;
+      padding: 14px 16px;
+      gap: 14px;
+      background: #fff;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+
+    .alert-row:hover {
+      background: #f9f9f9;
+    }
+
+    /* ── Unread styling ── */
+    .alert-row-wrapper.unread .alert-row {
+      background: #fafbff;
+    }
+
+    .alert-row-wrapper.unread .alert-row:hover {
+      background: #f5f7ff;
+    }
+
+    .alert-row-wrapper.unread .row-title {
+      font-weight: 600;
+    }
+
+    .unread-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #3b82f6;
+      flex-shrink: 0;
+    }
+
+    .unread-placeholder {
+      width: 7px;
+      flex-shrink: 0;
+    }
+
+    /* ── Row elements ── */
+    .row-severity {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .row-severity.critical { background: #ef4444; }
+    .row-severity.warning { background: #f59e0b; }
+    .row-severity.info { background: #3b82f6; }
+
+    .row-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .row-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: #1a1a1a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .row-meta {
+      font-size: 12px;
+      color: #999;
+      margin-top: 2px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .row-channel {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #7c3aed;
+      background: #f5f3ff;
+      padding: 2px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .row-author {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #777;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .row-author-avatar {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #e5e5e5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: 600;
+      color: #666;
+      flex-shrink: 0;
+    }
+
+    .row-msgs {
+      font-size: 12px;
+      color: #999;
+      white-space: nowrap;
+      flex-shrink: 0;
+      min-width: 50px;
+      text-align: right;
+    }
+
+    .row-time {
+      font-size: 12px;
+      color: #999;
+      white-space: nowrap;
+      flex-shrink: 0;
+      min-width: 55px;
+      text-align: right;
+    }
+
+    .row-chevron {
+      color: #ccc;
+      font-size: 14px;
+      flex-shrink: 0;
+      transition: transform 0.2s;
+    }
+
+    .alert-row-wrapper.expanded .row-chevron {
+      transform: rotate(90deg);
+    }
+
+    /* ── Expand panel (message preview) ── */
+    .row-expand {
+      display: none;
+      padding: 0 16px 16px 52px;
+      background: #fff;
+    }
+
+    .alert-row-wrapper.expanded .row-expand {
+      display: block;
+    }
+
+    .preview-thread {
+      background: #f9f9f9;
+      border: 1px solid #eee;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .preview-msg {
+      padding: 10px 14px;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex;
+      gap: 10px;
+    }
+
+    .preview-msg:last-of-type {
+      border-bottom: none;
+    }
+
+    .preview-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #e5e5e5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 600;
+      color: #666;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .preview-avatar.purple { background: #ede9fe; color: #7c3aed; }
+    .preview-avatar.blue   { background: #dbeafe; color: #2563eb; }
+    .preview-avatar.green  { background: #dcfce7; color: #16a34a; }
+
+    .preview-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .preview-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 2px;
+    }
+
+    .preview-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+
+    .preview-time {
+      font-size: 11px;
+      color: #bbb;
+    }
+
+    .preview-text {
+      font-size: 13px;
+      color: #555;
+      line-height: 1.5;
+    }
+
+    .preview-text code {
+      background: #eee;
+      padding: 0 4px;
+      border-radius: 3px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      color: #d63384;
+    }
+
+    .preview-text .mention {
+      color: #7c3aed;
+      font-weight: 500;
+    }
+
+    .preview-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 14px;
+      background: #f4f4f4;
+    }
+
+    .preview-more {
+      font-size: 12px;
+      color: #999;
+    }
+
+    .preview-open-link {
+      font-size: 12px;
+      color: #7c3aed;
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.15s;
+    }
+
+    .preview-open-link:hover {
+      color: #6d28d9;
+      text-decoration: underline;
+    }
+
+    /* ── Bulk toolbar ── */
+    .bulk-toolbar {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: #1a1a1a;
+      border-radius: 10px;
+      margin-top: 10px;
+    }
+
+    .bulk-toolbar.visible {
+      display: flex;
+    }
+
+    .bulk-count {
+      font-size: 13px;
+      color: #ccc;
+      font-weight: 500;
+    }
+
+    .bulk-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      border: none;
+      cursor: pointer;
+      transition: all 0.15s;
+      margin-left: auto;
+    }
+
+    .bulk-btn + .bulk-btn {
+      margin-left: 0;
+    }
+
+    .bulk-btn-ack {
+      background: #fff;
+      color: #1a1a1a;
+    }
+
+    .bulk-btn-ack:hover {
+      background: #f0f0f0;
+    }
+
+    .bulk-btn-close {
+      background: #dc2626;
+      color: #fff;
+    }
+
+    .bulk-btn-close:hover {
+      background: #b91c1c;
+    }
+
+    .bulk-btn-cancel {
+      background: transparent;
+      color: #888;
+      border: 1px solid #444;
+    }
+
+    .bulk-btn-cancel:hover {
+      color: #ccc;
+      border-color: #666;
+    }
+
+    /* ── Fixed bottom-right action panel ── */
+    .fixed-actions {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      gap: 8px;
+      z-index: 100;
+      background: #fff;
+      padding: 8px;
+      border-radius: 12px;
+      border: 1px solid #e5e5e5;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.06);
+    }
+
+    .fixed-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      border: 1px solid #e0e0e0;
+      background: #fff;
+      color: #555;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .fixed-btn:hover {
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+
+    .fixed-btn .action-icon {
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .fixed-btn.active {
+      border-color: transparent;
+      color: #fff;
+    }
+
+    .fixed-btn.no-impact:hover { background: #f0fdf4; border-color: #bbf7d0; color: #16a34a; }
+    .fixed-btn.no-impact.active { background: #16a34a; }
+    .fixed-btn.has-impact:hover { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
+    .fixed-btn.has-impact.active { background: #dc2626; }
+    .fixed-btn.noise:hover { background: #f5f5f5; border-color: #d4d4d4; color: #737373; }
+    .fixed-btn.noise.active { background: #737373; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #999;
+    }
+
+    .empty-state .empty-icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+      opacity: 0.4;
+    }
+
+    .empty-state .empty-text {
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <nav class="breadcrumb">
+        <a href="#">Alerts</a>
+        <span class="sep">/</span>
+        <span class="current">Teams</span>
+      </nav>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="page-header">
+      <h1 class="page-title">Teams Alerts</h1>
+      <p class="page-subtitle">Alerts created from MS Teams conversations</p>
+    </div>
+
+    <div class="summary-bar" id="summary-bar"></div>
+
+    <div class="status-tabs" id="status-tabs"></div>
+
+    <div class="alert-table" id="alert-table">
+      <div class="select-all-row">
+        <input type="checkbox" class="alert-checkbox" id="select-all" onchange="toggleSelectAll(this)">
+        <label class="select-all-label" for="select-all">Select all</label>
+      </div>
+      <!-- rows rendered by JS -->
+    </div>
+
+    <div class="bulk-toolbar" id="bulk-toolbar">
+      <span class="bulk-count"><span id="bulk-count">0</span> selected</span>
+      <button class="bulk-btn bulk-btn-cancel" onclick="clearSelection()">Cancel</button>
+      <button class="bulk-btn bulk-btn-ack" onclick="bulkAcknowledge()">&#128065; Acknowledge</button>
+      <button class="bulk-btn bulk-btn-close" onclick="bulkClose()">&#10005; Close</button>
+    </div>
+  </div>
+
+  <!-- Fixed bottom-right action panel -->
+  <div class="fixed-actions">
+    <button class="fixed-btn no-impact" onclick="selectFixedAction(this)">
+      <span class="action-icon">&#10003;</span> No Impact
+    </button>
+    <button class="fixed-btn has-impact" onclick="selectFixedAction(this)">
+      <span class="action-icon">&#9888;</span> Has Impact
+    </button>
+    <button class="fixed-btn noise" onclick="selectFixedAction(this)">
+      <span class="action-icon">&#128263;</span> It's Noise
+    </button>
+  </div>
+
+  <script src="components.js"></script>
+  <script src="teams-alerts-data.js"></script>
+  <script>
+    /* ═══════════════════════════════════════════════
+     *  RENDER — builds everything from TEAMS_ALERTS
+     * ═══════════════════════════════════════════════ */
+
+    /* ── Format plain text → HTML ──
+     *   @word   → purple mention
+     *   {key}   → component name from COMPONENTS, wrapped in <code>
+     *   `code`  → inline <code>
+     */
+    function formatText(text) {
+      // Escape HTML first so raw text is safe
+      let s = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+      // `code` → <code>code</code>
+      s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+      // {componentKey} → <code>resolved-name</code>
+      s = s.replace(/\{(\w+)\}/g, (_, key) => {
+        const val = COMPONENTS[key] || key;
+        return '<code>' + val + '</code>';
+      });
+
+      // @word → <span class="mention">@word</span>
+      s = s.replace(/@(\w+)/g, '<span class="mention">@$1</span>');
+
+      return s;
+    }
+
+    /* ── Build one preview message ── */
+    function renderPreviewMsg(msg) {
+      return `<div class="preview-msg">
+        <span class="preview-avatar ${msg.author.color}">${msg.author.initials}</span>
+        <div class="preview-content">
+          <div class="preview-header">
+            <span class="preview-name">${msg.author.name}</span>
+            <span class="preview-time">${msg.time}</span>
+          </div>
+          <div class="preview-text">${formatText(msg.text)}</div>
+        </div>
+      </div>`;
+    }
+
+    /* ── Build one table row ── */
+    function renderRow(alert) {
+      const isNew = alert.status === 'new';
+      const moreCount = alert.msgCount - alert.preview.length;
+      const channelName = TEAMS_CHANNELS[alert.channel] || alert.channel;
+      const componentName = COMPONENTS[alert.component] || alert.component;
+
+      return `<div class="alert-row-wrapper ${isNew ? 'unread' : ''}" data-status="${alert.status}" data-severity="${alert.severity}">
+        <div class="alert-row" onclick="toggleRow(this.parentElement)">
+          <input type="checkbox" class="alert-checkbox row-cb" onclick="event.stopPropagation(); updateBulk()">
+          ${isNew ? '<span class="unread-dot"></span>' : '<span class="unread-placeholder"></span>'}
+          <span class="row-severity ${alert.severity}"></span>
+          <div class="row-info">
+            <div class="row-title">${alert.title}</div>
+            <div class="row-meta">${alert.id} &middot; ${componentName}</div>
+          </div>
+          <span class="row-channel">${channelName}</span>
+          <span class="row-author">
+            <span class="row-author-avatar">${alert.author.initials}</span> ${alert.author.short}
+          </span>
+          <span class="row-msgs">${alert.msgCount} msgs</span>
+          <span class="row-time">${alert.time}</span>
+          <span class="row-chevron">&rsaquo;</span>
+        </div>
+        <div class="row-expand">
+          <div class="preview-thread">
+            ${alert.preview.map(renderPreviewMsg).join('')}
+            <div class="preview-footer">
+              <span class="preview-more">${moreCount > 0 ? '+' + moreCount + ' more messages' : ''}</span>
+              <a href="${alert.detailUrl}" class="preview-open-link">Open alert &rarr;</a>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    /* ── Build summary bar ── */
+    function renderSummary() {
+      const total = TEAMS_ALERTS.length;
+      const newCount = TEAMS_ALERTS.filter(a => a.status === 'new').length;
+      const critCount = TEAMS_ALERTS.filter(a => a.severity === 'critical').length;
+      const warnCount = TEAMS_ALERTS.filter(a => a.severity === 'warning').length;
+
+      document.getElementById('summary-bar').innerHTML = `
+        <div class="summary-stat"><span class="stat-value">${total}</span> alerts</div>
+        <div class="summary-sep"></div>
+        <div class="summary-stat"><span class="stat-dot new"></span><span class="stat-value">${newCount}</span> new</div>
+        ${critCount ? '<div class="summary-sep"></div><div class="summary-stat"><span class="stat-dot critical"></span><span class="stat-value">' + critCount + '</span> critical</div>' : ''}
+        ${warnCount ? '<div class="summary-sep"></div><div class="summary-stat"><span class="stat-dot warning"></span><span class="stat-value">' + warnCount + '</span> warning</div>' : ''}`;
+    }
+
+    /* ── Build tabs ── */
+    function renderTabs() {
+      const total = TEAMS_ALERTS.length;
+      const newCount = TEAMS_ALERTS.filter(a => a.status === 'new').length;
+      const ackCount = TEAMS_ALERTS.filter(a => a.status === 'acknowledged').length;
+
+      document.getElementById('status-tabs').innerHTML = `
+        <button class="status-tab active" onclick="filterTab(this, 'all')">All <span class="tab-count">${total}</span></button>
+        <button class="status-tab" onclick="filterTab(this, 'new')">New <span class="tab-count">${newCount}</span></button>
+        <button class="status-tab" onclick="filterTab(this, 'acknowledged')">Acknowledged <span class="tab-count">${ackCount}</span></button>`;
+    }
+
+    /* ── Build all rows ── */
+    function renderRows() {
+      const table = document.getElementById('alert-table');
+      const html = TEAMS_ALERTS.map(renderRow).join('');
+      table.insertAdjacentHTML('beforeend', html);
+    }
+
+    /* ── Init ── */
+    document.addEventListener('DOMContentLoaded', () => {
+      renderSummary();
+      renderTabs();
+      renderRows();
+    });
+
+    /* ═══════════════════════════════════════════════
+     *  INTERACTIONS
+     * ═══════════════════════════════════════════════ */
+
+    function filterTab(tab, status) {
+      document.querySelectorAll('.status-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      document.querySelectorAll('.alert-row-wrapper').forEach(row => {
+        row.style.display = (status === 'all' || row.dataset.status === status) ? '' : 'none';
+        row.classList.remove('expanded');
+      });
+    }
+
+    function toggleRow(wrapper) {
+      wrapper.classList.toggle('expanded');
+    }
+
+    function toggleSelectAll(selectAllCb) {
+      document.querySelectorAll('.row-cb').forEach(cb => {
+        const w = cb.closest('.alert-row-wrapper');
+        if (w.style.display !== 'none') cb.checked = selectAllCb.checked;
+      });
+      updateBulk();
+    }
+
+    function updateBulk() {
+      const checked = document.querySelectorAll('.row-cb:checked');
+      document.getElementById('bulk-count').textContent = checked.length;
+      document.getElementById('bulk-toolbar').classList.toggle('visible', checked.length > 0);
+      const allVis = document.querySelectorAll('.alert-row-wrapper:not([style*="display: none"]) .row-cb');
+      const allChk = document.querySelectorAll('.alert-row-wrapper:not([style*="display: none"]) .row-cb:checked');
+      document.getElementById('select-all').checked = allVis.length > 0 && allChk.length === allVis.length;
+    }
+
+    function clearSelection() {
+      document.querySelectorAll('.alert-checkbox').forEach(cb => { cb.checked = false; });
+      updateBulk();
+    }
+
+    function bulkAcknowledge() {
+      document.querySelectorAll('.row-cb:checked').forEach(cb => {
+        const w = cb.closest('.alert-row-wrapper');
+        w.classList.remove('unread');
+        w.dataset.status = 'acknowledged';
+        const dot = w.querySelector('.unread-dot');
+        if (dot) { const p = document.createElement('span'); p.className = 'unread-placeholder'; dot.replaceWith(p); }
+        cb.checked = false;
+      });
+      updateBulk();
+    }
+
+    function bulkClose() {
+      document.querySelectorAll('.row-cb:checked').forEach(cb => {
+        const w = cb.closest('.alert-row-wrapper');
+        w.style.transition = 'opacity 0.3s, transform 0.3s';
+        w.style.opacity = '0';
+        w.style.transform = 'translateX(20px)';
+        setTimeout(() => w.remove(), 300);
+      });
+      setTimeout(updateBulk, 350);
+    }
+
+    function selectFixedAction(btn) {
+      document.querySelectorAll('.fixed-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+  </script>
+
+</body>
+</html>
