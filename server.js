@@ -922,8 +922,8 @@ async function computeSnapshot(baseJql, mode = 'all') {
                 } catch (e2) { /* no epic link support */ }
               }
 
+              const children = [...childMap.values()];
               {
-                const children = [...childMap.values()];
                 const childDailyMaps = [];
 
                 const childGitList = [];
