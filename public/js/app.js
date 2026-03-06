@@ -1943,6 +1943,61 @@ class App {
       html += '</tbody></table>';
     }
 
+    // Child query info
+    if (node.childQuery) {
+      const q = node.childQuery;
+      html += '<div class="debug-query-info">';
+      html += '<div class="debug-query-title">Child resolution</div>';
+
+      // Raw links from Jira
+      html += `<div class="debug-query-row"><span class="debug-query-label">Raw links:</span> `;
+      if (q.rawLinkedKeys.length === 0) {
+        html += '<span class="debug-query-muted">none</span>';
+      } else {
+        html += q.rawLinkedKeys.map(l =>
+          `<span class="debug-query-key">${UI.escapeHtml(l.key)}</span><span class="debug-query-dir">${l.dir}</span>`
+        ).join(' ');
+      }
+      html += '</div>';
+
+      // After extractLinkedKeys (excluded cloners/duplicate removed)
+      html += `<div class="debug-query-row"><span class="debug-query-label">After link filter:</span> `;
+      html += q.extractedKeys.length > 0
+        ? q.extractedKeys.map(k => `<span class="debug-query-key">${UI.escapeHtml(k)}</span>`).join(' ')
+        : '<span class="debug-query-muted">none</span>';
+      html += '</div>';
+
+      // After visited filter
+      if (q.afterVisitedFilter.length !== q.extractedKeys.length) {
+        const skipped = q.extractedKeys.filter(k => !q.afterVisitedFilter.includes(k));
+        html += `<div class="debug-query-row"><span class="debug-query-label">Skipped (already visited):</span> `;
+        html += skipped.map(k => `<span class="debug-query-key debug-query-skipped">${UI.escapeHtml(k)}</span>`).join(' ');
+        html += '</div>';
+      }
+
+      // JQL
+      if (q.jql) {
+        html += `<div class="debug-query-row"><span class="debug-query-label">JQL:</span> <code class="debug-query-jql">${UI.escapeHtml(q.jql)}</code></div>`;
+        html += `<div class="debug-query-row"><span class="debug-query-label">Result:</span> ${q.resultCount} issues`;
+        if (q.returnedKeys) {
+          html += ' (' + q.returnedKeys.map(k => `<span class="debug-query-key">${UI.escapeHtml(k)}</span>`).join(' ') + ')';
+        }
+        html += '</div>';
+
+        // Filtered out by JQL
+        if (q.filteredOut && q.filteredOut.length > 0) {
+          html += `<div class="debug-query-row debug-query-warn"><span class="debug-query-label">Filtered out by JQL:</span> `;
+          html += q.filteredOut.map(k => `<span class="debug-query-key">${UI.escapeHtml(k)}</span>`).join(' ');
+          html += ` <span class="debug-query-muted">(${UI.escapeHtml(q.filter)})</span>`;
+          html += '</div>';
+        }
+      } else {
+        html += `<div class="debug-query-row"><span class="debug-query-muted">No keys to query</span></div>`;
+      }
+
+      html += '</div>';
+    }
+
     // Nested children
     if (level === 'theme' && node.milestones) {
       for (const ms of node.milestones) {

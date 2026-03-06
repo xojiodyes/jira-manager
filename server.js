@@ -301,18 +301,44 @@ async function generateDebugHierarchy(baseJql) {
   for (const themeIssue of (themesResult.issues || [])) {
     visited.add(themeIssue.key);
     const themeNode = issueToDebugNode(themeIssue, 'theme');
+    themeNode.query = {
+      jql: themeJql,
+      description: 'Loaded as theme (labels = theme)',
+      resultCount: themesResult.issues.length
+    };
     stats.totalThemes++;
     stats.totalProblems += themeNode.problems.length;
 
     // 2. Load milestones for this theme
     const allLinkedKeys = extractLinkedKeys(themeIssue, true);
+    const allRawLinks = (themeIssue.fields?.issuelinks || []).map(l => ({
+      key: (l.outwardIssue || l.inwardIssue)?.key,
+      dir: l.outwardIssue ? 'out' : 'in',
+      type: l.type?.name
+    })).filter(l => l.key);
     const milestoneKeys = allLinkedKeys.filter(k => !visited.has(k));
     themeNode.milestones = [];
 
-    if (milestoneKeys.length > 0) {
-      const msJql = `key in (${milestoneKeys.join(',')}) AND labels = milestone ORDER BY updated DESC`;
+    const msJql = milestoneKeys.length > 0
+      ? `key in (${milestoneKeys.join(',')}) AND labels = milestone ORDER BY updated DESC`
+      : null;
+    themeNode.childQuery = {
+      rawLinkedKeys: allRawLinks,
+      extractedKeys: allLinkedKeys,
+      afterVisitedFilter: milestoneKeys,
+      jql: msJql,
+      filter: 'labels = milestone',
+      resultCount: 0
+    };
+
+    if (milestoneKeys.length > 0 && msJql) {
       try {
         const msResult = await jiraSearch(msJql);
+        themeNode.childQuery.resultCount = msResult.issues?.length || 0;
+        themeNode.childQuery.returnedKeys = (msResult.issues || []).map(i => i.key);
+        themeNode.childQuery.filteredOut = milestoneKeys.filter(k =>
+          !(msResult.issues || []).some(i => i.key === k));
+
         for (const msIssue of (msResult.issues || [])) {
           visited.add(msIssue.key);
           const msNode = issueToDebugNode(msIssue, 'milestone');
@@ -320,13 +346,35 @@ async function generateDebugHierarchy(baseJql) {
           stats.totalProblems += msNode.problems.length;
 
           // 3. Load tasks for this milestone
-          const taskLinkedKeys = extractLinkedKeys(msIssue, true).filter(k => !visited.has(k));
+          const msRawLinks = (msIssue.fields?.issuelinks || []).map(l => ({
+            key: (l.outwardIssue || l.inwardIssue)?.key,
+            dir: l.outwardIssue ? 'out' : 'in',
+            type: l.type?.name
+          })).filter(l => l.key);
+          const taskAllKeys = extractLinkedKeys(msIssue, true);
+          const taskLinkedKeys = taskAllKeys.filter(k => !visited.has(k));
           msNode.tasks = [];
 
-          if (taskLinkedKeys.length > 0) {
-            const taskJql = `key in (${taskLinkedKeys.join(',')}) AND (labels is EMPTY OR (labels != theme AND labels != milestone)) ORDER BY updated DESC`;
+          const taskJql = taskLinkedKeys.length > 0
+            ? `key in (${taskLinkedKeys.join(',')}) AND (labels is EMPTY OR (labels != theme AND labels != milestone)) ORDER BY updated DESC`
+            : null;
+          msNode.childQuery = {
+            rawLinkedKeys: msRawLinks,
+            extractedKeys: taskAllKeys,
+            afterVisitedFilter: taskLinkedKeys,
+            jql: taskJql,
+            filter: 'labels != theme AND labels != milestone',
+            resultCount: 0
+          };
+
+          if (taskLinkedKeys.length > 0 && taskJql) {
             try {
               const taskResult = await jiraSearch(taskJql);
+              msNode.childQuery.resultCount = taskResult.issues?.length || 0;
+              msNode.childQuery.returnedKeys = (taskResult.issues || []).map(i => i.key);
+              msNode.childQuery.filteredOut = taskLinkedKeys.filter(k =>
+                !(taskResult.issues || []).some(i => i.key === k));
+
               for (const taskIssue of (taskResult.issues || [])) {
                 visited.add(taskIssue.key);
                 const taskNode = issueToDebugNode(taskIssue, 'task');
@@ -340,11 +388,34 @@ async function generateDebugHierarchy(baseJql) {
                 // 4. Load children for epics
                 taskNode.children = [];
                 if (isEpic) {
-                  const childKeys = extractLinkedKeys(taskIssue, true).filter(k => !visited.has(k));
-                  if (childKeys.length > 0) {
-                    const childJql = `key in (${childKeys.join(',')}) AND (labels is EMPTY OR (labels != theme AND labels != milestone)) ORDER BY updated DESC`;
+                  const epicRawLinks = (taskIssue.fields?.issuelinks || []).map(l => ({
+                    key: (l.outwardIssue || l.inwardIssue)?.key,
+                    dir: l.outwardIssue ? 'out' : 'in',
+                    type: l.type?.name
+                  })).filter(l => l.key);
+                  const childAllKeys = extractLinkedKeys(taskIssue, true);
+                  const childKeys = childAllKeys.filter(k => !visited.has(k));
+
+                  const childJql = childKeys.length > 0
+                    ? `key in (${childKeys.join(',')}) AND (labels is EMPTY OR (labels != theme AND labels != milestone)) ORDER BY updated DESC`
+                    : null;
+                  taskNode.childQuery = {
+                    rawLinkedKeys: epicRawLinks,
+                    extractedKeys: childAllKeys,
+                    afterVisitedFilter: childKeys,
+                    jql: childJql,
+                    filter: 'labels != theme AND labels != milestone',
+                    resultCount: 0
+                  };
+
+                  if (childKeys.length > 0 && childJql) {
                     try {
                       const childResult = await jiraSearch(childJql);
+                      taskNode.childQuery.resultCount = childResult.issues?.length || 0;
+                      taskNode.childQuery.returnedKeys = (childResult.issues || []).map(i => i.key);
+                      taskNode.childQuery.filteredOut = childKeys.filter(k =>
+                        !(childResult.issues || []).some(i => i.key === k));
+
                       for (const childIssue of (childResult.issues || [])) {
                         visited.add(childIssue.key);
                         const childNode = issueToDebugNode(childIssue, 'child');

@@ -199,14 +199,57 @@ function createDbStore(pool) {
 }
 
 /**
- * Create a PostgreSQL store.
- * Requires DATABASE_URL env var or config.database.connectionString.
+ * In-memory store for mock/dev mode (no persistence).
+ */
+function createMemoryStore() {
+  const issues = {};
+  const history = [];
+  let progressData = { snapshots: {}, gitActivity: {}, developers: {}, lastRun: null };
+
+  return {
+    type: 'memory',
+    async getAllIssues() { return issues; },
+    async getIssueField(issueKey, field) { return issues[issueKey]?.[field] ?? null; },
+    async upsertIssueField(issueKey, field, value) {
+      if (!issues[issueKey]) issues[issueKey] = {};
+      issues[issueKey][field] = value;
+    },
+    async appendHistory(entry) { history.push(entry); },
+    async getHistory(issueKey) {
+      return issueKey ? history.filter(h => h.issueKey === issueKey) : history;
+    },
+    async getProgressData() { return progressData; },
+    async saveSnapshotData({ dailyResults, gitResults, devResults, days, mode }) {
+      const doTrend = mode === 'all' || mode === 'trend';
+      const doGit = mode === 'all' || mode === 'git';
+      if (doTrend) {
+        for (const day of days) {
+          if (!progressData.snapshots[day]) progressData.snapshots[day] = {};
+          for (const [key, dailyMap] of Object.entries(dailyResults)) {
+            if (dailyMap[day] !== undefined) {
+              progressData.snapshots[day][key] = { progress: dailyMap[day] };
+            }
+          }
+        }
+        progressData.developers = devResults;
+      }
+      if (doGit) { progressData.gitActivity = gitResults; }
+      progressData.lastRun = new Date().toISOString();
+    },
+    async close() {}
+  };
+}
+
+/**
+ * Create a store based on configuration.
+ * PostgreSQL if configured, otherwise in-memory (for mock/dev).
  */
 async function createStore(config) {
   const connStr = process.env.DATABASE_URL || config?.database?.connectionString;
 
   if (!connStr) {
-    throw new Error('Database not configured. Set DATABASE_URL or add database.connectionString to config.json');
+    console.log('[DB] No database configured, using in-memory store');
+    return createMemoryStore();
   }
 
   const { Pool } = require('./vendor/pg.bundle.js');
