@@ -971,6 +971,9 @@ class App {
       tasksCount.textContent = data.total > 0 ? data.total : '';
       this.renderHierarchyTasks(tasksContainer, data.issues);
 
+      // Async: fetch Epic Link child counts for epics and update badges
+      this._loadEpicChildCounts(data.issues, tasksContainer);
+
       // Keyboard: highlight first task
       this.highlightedIndex.tasks = data.issues.length > 0 ? 0 : -1;
       if (!this._kbStayInPanel) {
@@ -980,6 +983,40 @@ class App {
     } catch (err) {
       tasksContainer.classList.remove('loading-overlay');
       tasksContainer.innerHTML = UI.renderError(err.message);
+    }
+  }
+
+  async _loadEpicChildCounts(issues, container) {
+    // Find epics that might have Epic Link children
+    const epics = issues.filter(i => i.fields?.issuetype?.name === 'Epic');
+    if (epics.length === 0) return;
+
+    // Fetch Epic Link child counts in parallel
+    const promises = epics.map(async (epic) => {
+      try {
+        const res = await jiraAPI.searchIssues(`"Epic Link" = ${epic.key}`, 0, 1);
+        return { key: epic.key, count: res.total || 0 };
+      } catch (e) {
+        try {
+          const res = await jiraAPI.searchIssues(`parent = ${epic.key}`, 0, 1);
+          return { key: epic.key, count: res.total || 0 };
+        } catch (e2) { return { key: epic.key, count: 0 }; }
+      }
+    });
+
+    const results = await Promise.all(promises);
+
+    // Update Items badges in DOM
+    for (const { key, count } of results) {
+      if (count === 0) continue;
+      const row = container.querySelector(`tr[data-key="${key}"]`);
+      if (!row) continue;
+      const badge = row.querySelector('.hierarchy-items-count');
+      if (badge) {
+        const currentCount = parseInt(badge.textContent, 10) || 0;
+        badge.textContent = currentCount + count;
+        badge.title = `${currentCount} linked + ${count} Epic Link children`;
+      }
     }
   }
 
@@ -1308,7 +1345,7 @@ class App {
       this.renderHierarchyTasks(container, mergedIssues, 'epicSubTasks');
 
       // Keyboard: highlight first epic task
-      this.highlightedIndex.epicTasks = data.issues.length > 0 ? 0 : -1;
+      this.highlightedIndex.epicTasks = mergedIssues.length > 0 ? 0 : -1;
       if (!this._kbStayInPanel) {
         this.activePanel = 'epicTasks';
         this.applyHighlight('epicTasks');
