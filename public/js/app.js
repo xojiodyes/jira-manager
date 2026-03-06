@@ -818,6 +818,9 @@ class App {
       countEl.textContent = data.total > 0 ? data.total : '';
       this.renderHierarchyList(container, data.issues, 'theme');
 
+      // Async: load average State from children (milestones)
+      this._loadChildStates(data.issues, container, 'milestone');
+
       // Keyboard: highlight first theme and auto-select it with full cascade
       this.activePanel = 'themes';
       this.highlightedIndex.themes = data.issues.length > 0 ? 0 : -1;
@@ -910,6 +913,9 @@ class App {
       milestonesCount.textContent = data.total > 0 ? data.total : '';
       this.renderHierarchyList(milestonesContainer, data.issues, 'milestone');
 
+      // Async: load average State from children (tasks/epics)
+      this._loadChildStates(data.issues, milestonesContainer, null);
+
       // Keyboard: highlight first milestone
       this.highlightedIndex.milestones = data.issues.length > 0 ? 0 : -1;
       if (!this._kbStayInPanel) {
@@ -972,7 +978,7 @@ class App {
       this.renderHierarchyTasks(tasksContainer, data.issues);
 
       // Async: fetch Epic Link child counts for epics and update badges
-      this._loadEpicChildCounts(data.issues, tasksContainer);
+      this._loadEpicChildData(data.issues, tasksContainer);
 
       // Keyboard: highlight first task
       this.highlightedIndex.tasks = data.issues.length > 0 ? 0 : -1;
@@ -986,37 +992,127 @@ class App {
     }
   }
 
-  async _loadEpicChildCounts(issues, container) {
+  async _loadEpicChildData(issues, container) {
     // Find epics that might have Epic Link children
     const epics = issues.filter(i => i.fields?.issuetype?.name === 'Epic');
     if (epics.length === 0) return;
 
-    // Fetch Epic Link child counts in parallel
+    // Fetch Epic Link children (with statuses) in parallel
     const promises = epics.map(async (epic) => {
+      let childIssues = [];
       try {
-        const res = await jiraAPI.searchIssues(`"Epic Link" = ${epic.key}`, 0, 1);
-        return { key: epic.key, count: res.total || 0 };
+        const res = await jiraAPI.searchIssues(`"Epic Link" = ${epic.key}`, 0, 200);
+        childIssues = res.issues || [];
       } catch (e) {
         try {
-          const res = await jiraAPI.searchIssues(`parent = ${epic.key}`, 0, 1);
-          return { key: epic.key, count: res.total || 0 };
-        } catch (e2) { return { key: epic.key, count: 0 }; }
+          const res = await jiraAPI.searchIssues(`parent = ${epic.key}`, 0, 200);
+          childIssues = res.issues || [];
+        } catch (e2) { /* no epic link support */ }
       }
+      return { key: epic.key, children: childIssues };
     });
 
     const results = await Promise.all(promises);
 
-    // Update Items badges in DOM
-    for (const { key, count } of results) {
-      if (count === 0) continue;
+    // Update Items count and State badges in DOM
+    for (const { key, children } of results) {
       const row = container.querySelector(`tr[data-key="${key}"]`);
       if (!row) continue;
-      const badge = row.querySelector('.hierarchy-items-count');
-      if (badge) {
-        const currentCount = parseInt(badge.textContent, 10) || 0;
-        badge.textContent = currentCount + count;
-        badge.title = `${currentCount} linked + ${count} Epic Link children`;
+
+      // Update Items count
+      if (children.length > 0) {
+        const badge = row.querySelector('.hierarchy-items-count');
+        if (badge) {
+          const currentCount = parseInt(badge.textContent, 10) || 0;
+          badge.textContent = currentCount + children.length;
+          badge.title = `${currentCount} linked + ${children.length} Epic Link children`;
+        }
       }
+
+      // Update State with average of children
+      if (children.length > 0) {
+        const stateBadge = row.querySelector('[data-state-key]');
+        if (stateBadge) {
+          const avg = Math.round(children.reduce((sum, ch) => sum + App.statusToProgress(ch.fields?.status?.name), 0) / children.length);
+          // Round to nearest valid step
+          const steps = [0, 20, 40, 60, 80, 100];
+          const rounded = steps.reduce((prev, curr) => Math.abs(curr - avg) < Math.abs(prev - avg) ? curr : prev);
+          stateBadge.className = `progress-badge progress-${rounded}`;
+          stateBadge.textContent = `${avg}%`;
+          stateBadge.title = `Average of ${children.length} children`;
+        }
+      }
+    }
+  }
+
+  /**
+   * Async: load children for hierarchy list items (themes/milestones)
+   * and update State badge with average of children's statuses.
+   * @param {Array} issues - parent issues
+   * @param {HTMLElement} container - DOM container with .hierarchy-row elements
+   * @param {string|null} childLabelFilter - 'milestone' for themes, null for milestone children
+   */
+  async _loadChildStates(issues, container, childLabelFilter) {
+    if (issues.length === 0) return;
+
+    // Collect all linked keys per parent issue
+    const EXCLUDED = ['cloners', 'duplicate'];
+    const parentKeyMap = {}; // { parentKey: [linkedKey1, linkedKey2, ...] }
+    const allLinkedKeys = new Set();
+
+    for (const issue of issues) {
+      const links = issue.fields?.issuelinks || [];
+      const linkedKeys = [];
+      for (const link of links) {
+        const typeName = (link.type?.name || '').toLowerCase();
+        if (EXCLUDED.some(ex => typeName.includes(ex))) continue;
+        if (link.outwardIssue) { linkedKeys.push(link.outwardIssue.key); allLinkedKeys.add(link.outwardIssue.key); }
+        if (link.inwardIssue) { linkedKeys.push(link.inwardIssue.key); allLinkedKeys.add(link.inwardIssue.key); }
+      }
+      parentKeyMap[issue.key] = linkedKeys;
+    }
+
+    if (allLinkedKeys.size === 0) return;
+
+    // Bulk fetch all linked issues in one JQL call
+    const keysArray = [...allLinkedKeys];
+    let jql = `key in (${keysArray.join(',')})`;
+    if (childLabelFilter) {
+      jql += ` AND labels = ${childLabelFilter}`;
+    } else {
+      jql += ` AND (labels is EMPTY OR (labels != theme AND labels != milestone))`;
+    }
+
+    try {
+      const data = await jiraAPI.searchIssues(jql, 0, 200);
+      const childStatusMap = {}; // { key: statusName }
+      for (const ch of (data.issues || [])) {
+        childStatusMap[ch.key] = ch.fields?.status?.name;
+      }
+
+      // Compute average State per parent and update DOM
+      for (const issue of issues) {
+        const linkedKeys = parentKeyMap[issue.key] || [];
+        const childProgresses = linkedKeys
+          .filter(k => childStatusMap[k] !== undefined)
+          .map(k => App.statusToProgress(childStatusMap[k]));
+
+        if (childProgresses.length === 0) continue;
+
+        const avg = Math.round(childProgresses.reduce((a, b) => a + b, 0) / childProgresses.length);
+        const steps = [0, 20, 40, 60, 80, 100];
+        const rounded = steps.reduce((prev, curr) => Math.abs(curr - avg) < Math.abs(prev - avg) ? curr : prev);
+
+        const row = container.querySelector(`.hierarchy-row[data-key="${issue.key}"]`);
+        if (!row) continue;
+        const stateEl = row.querySelector('[data-state-key]');
+        if (stateEl) {
+          stateEl.innerHTML = `<span class="progress-badge progress-${rounded}">${avg}%</span>`;
+          stateEl.title = `Average of ${childProgresses.length} children`;
+        }
+      }
+    } catch (e) {
+      console.error('[State] Failed to load child states:', e.message);
     }
   }
 
@@ -1038,6 +1134,7 @@ class App {
         <span class="hlh-count">SP</span>
         <span class="hlh-edit">S%</span>
         <span class="hlh-edit">C%</span>
+        <span class="hlh-state">State</span>
         <span class="hlh-sparkline">Trend</span>
         <span class="hlh-git">Git</span>
       </div>`;
@@ -1063,6 +1160,7 @@ class App {
             <span class="hierarchy-sp-count">${f.story_points ?? f.customfield_10002 ?? ''}</span>
             <span class="hierarchy-edit editable-field editable-status" data-key="${issue.key}" data-field="status">${this.getLocalField(issue.key, 'status') !== null ? this.getLocalField(issue.key, 'status') + '%' : '—'}</span>
             <span class="hierarchy-edit editable-field editable-confidence" data-key="${issue.key}" data-field="confidence">${this.getLocalField(issue.key, 'confidence') !== null ? this.getLocalField(issue.key, 'confidence') + '%' : '—'}</span>
+            <span class="hierarchy-state" data-state-key="${issue.key}"><span class="progress-badge progress-${App.statusToProgress(f.status?.name)}">${App.statusToProgress(f.status?.name)}%</span></span>
             <span class="hierarchy-sparkline">${UI.renderSparkline(this.progressHistory[issue.key] || [], issue.key)}</span>
             <span class="hierarchy-git-dot">${UI.renderGitDot(this.gitActivity[issue.key], issue.key)}</span>
           </div>
@@ -1386,7 +1484,6 @@ class App {
 
     const showJiraStatus = context !== 'epicTasks' && context !== 'epicSubTasks';
     const showPriority = context !== 'epicTasks' && context !== 'epicSubTasks';
-    const showProgress = context === 'epicSubTasks';
     const compactType = context === 'epicTasks' || context === 'epicSubTasks';
 
     let colgroup = '<colgroup>';
@@ -1402,7 +1499,7 @@ class App {
     colgroup += '<col style="width: 40px;">';   // SP
     colgroup += '<col style="width: 56px;">';   // S%
     colgroup += '<col style="width: 56px;">';   // C%
-    if (showProgress) colgroup += '<col style="width: 80px;">';   // Progress
+    colgroup += '<col style="width: 70px;">';   // State
     colgroup += '<col style="width: 84px;">';   // Trend
     colgroup += '<col style="width: 36px;">';   // Git
     colgroup += '<col style="width: 140px;">';  // Assignee
@@ -1414,7 +1511,7 @@ class App {
     if (showPriority) thead += '<th>Priority</th>';
     if (showItemsCount) thead += '<th>Items</th><th>#D/Q</th>';
     thead += '<th>SP</th><th>S%</th><th>C%</th>';
-    if (showProgress) thead += '<th>Progress</th>';
+    thead += '<th>State</th>';
     thead += '<th>Trend</th><th>Git</th><th>Assignee</th></tr>';
 
     let html = `
@@ -1474,9 +1571,9 @@ class App {
       html += `<td class="editable-cell"><span class="editable-field editable-status" data-key="${issue.key}" data-field="status">${this.getLocalField(issue.key, 'status') !== null ? this.getLocalField(issue.key, 'status') + '%' : '—'}</span></td>`;
       html += `<td class="editable-cell"><span class="editable-field editable-confidence" data-key="${issue.key}" data-field="confidence">${this.getLocalField(issue.key, 'confidence') !== null ? this.getLocalField(issue.key, 'confidence') + '%' : '—'}</span></td>`;
 
-      if (showProgress) {
+      {
         const pct = App.statusToProgress(f.status?.name);
-        html += `<td class="progress-cell"><span class="progress-badge progress-${pct}">${pct}%</span></td>`;
+        html += `<td class="progress-cell"><span class="progress-badge progress-${pct}" data-state-key="${issue.key}">${pct}%</span></td>`;
       }
 
       html += `<td class="sparkline-cell">${UI.renderSparkline(this.progressHistory[issue.key] || [], issue.key)}</td>`;

@@ -497,6 +497,25 @@ a:hover {
 .progress-80 { background: #ffe2cc; color: #c25100; }
 .progress-100 { background: #e3fcef; color: #006644; }
 
+/* State column in hierarchy list */
+.hlh-state {
+  width: 52px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 10px;
+}
+.hierarchy-state {
+  flex-shrink: 0;
+  width: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hierarchy-state .progress-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+}
+
 /* Sparklines */
 .hlh-sparkline {
   width: 84px;
