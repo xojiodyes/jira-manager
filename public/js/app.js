@@ -31,6 +31,9 @@ class App {
     // Developers per issue (last 30 days), grouped by role
     this.developers = {}; // { "KEY": { Dev: [...], Review: [...], QA: [...] } }
 
+    // Computed State cache: { "KEY": percentNumber }
+    this.computedStates = {};
+
     this.init();
   }
 
@@ -818,8 +821,8 @@ class App {
       countEl.textContent = data.total > 0 ? data.total : '';
       this.renderHierarchyList(container, data.issues, 'theme');
 
-      // Async: load average State from children (milestones)
-      this._loadChildStates(data.issues, container, 'milestone');
+      // Async: load average State (2 levels deep: theme → milestones → tasks)
+      this._loadThemeStates(data.issues, container);
 
       // Keyboard: highlight first theme and auto-select it with full cascade
       this.activePanel = 'themes';
@@ -913,8 +916,8 @@ class App {
       milestonesCount.textContent = data.total > 0 ? data.total : '';
       this.renderHierarchyList(milestonesContainer, data.issues, 'milestone');
 
-      // Async: load average State from children (tasks/epics)
-      this._loadChildStates(data.issues, milestonesContainer, null);
+      // Async: load State = avg of children's computed states
+      this._loadMilestoneStates(data.issues, milestonesContainer);
 
       // Keyboard: highlight first milestone
       this.highlightedIndex.milestones = data.issues.length > 0 ? 0 : -1;
@@ -992,29 +995,129 @@ class App {
     }
   }
 
+  // ============================================================
+  // STATE COMPUTATION (cascading averages with cache)
+  // ============================================================
+
+  /**
+   * Extract linked keys from an issue (excluding clones/duplicates).
+   */
+  _extractLinkedKeys(issue) {
+    const EXCLUDED = ['cloners', 'duplicate'];
+    const keys = [];
+    for (const link of (issue.fields?.issuelinks || [])) {
+      const typeName = (link.type?.name || '').toLowerCase();
+      if (EXCLUDED.some(ex => typeName.includes(ex))) continue;
+      if (link.outwardIssue) keys.push(link.outwardIssue.key);
+      if (link.inwardIssue) keys.push(link.inwardIssue.key);
+    }
+    return keys;
+  }
+
+  /**
+   * Update State badge in DOM (works for both hierarchy-row and tr[data-key]).
+   */
+  _updateStateBadge(container, issueKey, avg, childCount) {
+    const steps = [0, 20, 40, 60, 80, 100];
+    const rounded = steps.reduce((prev, curr) => Math.abs(curr - avg) < Math.abs(prev - avg) ? curr : prev);
+
+    // Try hierarchy-row first (themes/milestones), then tr (tables)
+    const row = container.querySelector(`.hierarchy-row[data-key="${issueKey}"]`)
+              || container.querySelector(`tr[data-key="${issueKey}"]`);
+    if (!row) return;
+    const stateEl = row.querySelector('[data-state-key]');
+    if (stateEl) {
+      // For hierarchy-row, stateEl is a span wrapping a badge
+      if (stateEl.classList.contains('hierarchy-state')) {
+        stateEl.innerHTML = `<span class="progress-badge progress-${rounded}">${avg}%</span>`;
+      } else {
+        // For table cells, stateEl IS the badge
+        stateEl.className = `progress-badge progress-${rounded}`;
+        stateEl.textContent = `${avg}%`;
+      }
+      stateEl.title = `Average of ${childCount} children`;
+    }
+  }
+
+  /**
+   * Fetch Epic Link children for an epic. Returns array of issues.
+   */
+  async _fetchEpicChildren(epicKey) {
+    try {
+      const res = await jiraAPI.searchIssues(`"Epic Link" = ${epicKey}`, 0, 200);
+      return res.issues || [];
+    } catch (e) {
+      try {
+        const res = await jiraAPI.searchIssues(`parent = ${epicKey}`, 0, 200);
+        return res.issues || [];
+      } catch (e2) { return []; }
+    }
+  }
+
+  /**
+   * Compute and cache states for a list of issue keys.
+   * Leaf tasks → own statusToProgress.
+   * Epics → average of Epic Link children's statusToProgress.
+   * Returns map { key: statePercent }.
+   */
+  async _computeStatesForKeys(keys) {
+    if (keys.length === 0) return {};
+
+    // Find uncached keys
+    const uncached = keys.filter(k => this.computedStates[k] === undefined);
+    if (uncached.length > 0) {
+      const jql = `key in (${uncached.join(',')})`;
+      const data = await jiraAPI.searchIssues(jql, 0, 200);
+
+      const epics = [];
+      for (const issue of (data.issues || [])) {
+        if (issue.fields?.issuetype?.name === 'Epic') {
+          epics.push(issue);
+        } else {
+          // Leaf: own statusToProgress
+          this.computedStates[issue.key] = App.statusToProgress(issue.fields?.status?.name);
+        }
+      }
+
+      // Epics: fetch children in parallel, compute average
+      if (epics.length > 0) {
+        const epicPromises = epics.map(async (epic) => {
+          const children = await this._fetchEpicChildren(epic.key);
+          if (children.length === 0) {
+            this.computedStates[epic.key] = App.statusToProgress(epic.fields?.status?.name);
+          } else {
+            const avg = Math.round(
+              children.reduce((sum, ch) => sum + App.statusToProgress(ch.fields?.status?.name), 0) / children.length
+            );
+            this.computedStates[epic.key] = avg;
+          }
+        });
+        await Promise.all(epicPromises);
+      }
+    }
+
+    const result = {};
+    for (const k of keys) {
+      if (this.computedStates[k] !== undefined) result[k] = this.computedStates[k];
+    }
+    return result;
+  }
+
+  /**
+   * Async: load Epic Link children data for Epics/Stories table.
+   * Updates Items count + State badge. Stores computed state in cache.
+   */
   async _loadEpicChildData(issues, container) {
-    // Find epics that might have Epic Link children
     const epics = issues.filter(i => i.fields?.issuetype?.name === 'Epic');
     if (epics.length === 0) return;
 
-    // Fetch Epic Link children (with statuses) in parallel
     const promises = epics.map(async (epic) => {
-      let childIssues = [];
-      try {
-        const res = await jiraAPI.searchIssues(`"Epic Link" = ${epic.key}`, 0, 200);
-        childIssues = res.issues || [];
-      } catch (e) {
-        try {
-          const res = await jiraAPI.searchIssues(`parent = ${epic.key}`, 0, 200);
-          childIssues = res.issues || [];
-        } catch (e2) { /* no epic link support */ }
-      }
-      return { key: epic.key, children: childIssues };
+      const children = await this._fetchEpicChildren(epic.key);
+      return { key: epic.key, children };
     });
 
     const results = await Promise.all(promises);
 
-    // Update Items count and State badges in DOM
     for (const { key, children } of results) {
       const row = container.querySelector(`tr[data-key="${key}"]`);
       if (!row) continue;
@@ -1029,90 +1132,133 @@ class App {
         }
       }
 
-      // Update State with average of children
+      // Compute and cache State
       if (children.length > 0) {
-        const stateBadge = row.querySelector('[data-state-key]');
-        if (stateBadge) {
-          const avg = Math.round(children.reduce((sum, ch) => sum + App.statusToProgress(ch.fields?.status?.name), 0) / children.length);
-          // Round to nearest valid step
-          const steps = [0, 20, 40, 60, 80, 100];
-          const rounded = steps.reduce((prev, curr) => Math.abs(curr - avg) < Math.abs(prev - avg) ? curr : prev);
-          stateBadge.className = `progress-badge progress-${rounded}`;
-          stateBadge.textContent = `${avg}%`;
-          stateBadge.title = `Average of ${children.length} children`;
-        }
+        const avg = Math.round(
+          children.reduce((sum, ch) => sum + App.statusToProgress(ch.fields?.status?.name), 0) / children.length
+        );
+        this.computedStates[key] = avg;
+      } else {
+        const epicIssue = issues.find(i => i.key === key);
+        this.computedStates[key] = App.statusToProgress(epicIssue?.fields?.status?.name);
+      }
+
+      // Update State badge in DOM
+      this._updateStateBadge(container, key, this.computedStates[key], children.length);
+    }
+
+    // Also cache state for non-epics (leaf tasks in the table)
+    for (const issue of issues) {
+      if (this.computedStates[issue.key] === undefined) {
+        this.computedStates[issue.key] = App.statusToProgress(issue.fields?.status?.name);
       }
     }
   }
 
   /**
-   * Async: load children for hierarchy list items (themes/milestones)
-   * and update State badge with average of children's statuses.
-   * @param {Array} issues - parent issues
-   * @param {HTMLElement} container - DOM container with .hierarchy-row elements
-   * @param {string|null} childLabelFilter - 'milestone' for themes, null for milestone children
+   * Async: load State for milestones.
+   * Milestone state = avg of children's computed states.
+   * Children are tasks/epics (epics resolved recursively via _computeStatesForKeys).
    */
-  async _loadChildStates(issues, container, childLabelFilter) {
-    if (issues.length === 0) return;
+  async _loadMilestoneStates(milestones, container) {
+    if (milestones.length === 0) return;
 
-    // Collect all linked keys per parent issue
-    const EXCLUDED = ['cloners', 'duplicate'];
-    const parentKeyMap = {}; // { parentKey: [linkedKey1, linkedKey2, ...] }
-    const allLinkedKeys = new Set();
-
-    for (const issue of issues) {
-      const links = issue.fields?.issuelinks || [];
-      const linkedKeys = [];
-      for (const link of links) {
-        const typeName = (link.type?.name || '').toLowerCase();
-        if (EXCLUDED.some(ex => typeName.includes(ex))) continue;
-        if (link.outwardIssue) { linkedKeys.push(link.outwardIssue.key); allLinkedKeys.add(link.outwardIssue.key); }
-        if (link.inwardIssue) { linkedKeys.push(link.inwardIssue.key); allLinkedKeys.add(link.inwardIssue.key); }
-      }
-      parentKeyMap[issue.key] = linkedKeys;
+    // Collect children keys per milestone
+    const msToChildren = {};
+    const allChildKeys = new Set();
+    for (const ms of milestones) {
+      const linkedKeys = this._extractLinkedKeys(ms);
+      msToChildren[ms.key] = linkedKeys;
+      linkedKeys.forEach(k => allChildKeys.add(k));
     }
-
-    if (allLinkedKeys.size === 0) return;
-
-    // Bulk fetch all linked issues in one JQL call
-    const keysArray = [...allLinkedKeys];
-    let jql = `key in (${keysArray.join(',')})`;
-    if (childLabelFilter) {
-      jql += ` AND labels = ${childLabelFilter}`;
-    } else {
-      jql += ` AND (labels is EMPTY OR (labels != theme AND labels != milestone))`;
-    }
+    if (allChildKeys.size === 0) return;
 
     try {
+      // Filter to tasks/epics only
+      const jql = `key in (${[...allChildKeys].join(',')}) AND (labels is EMPTY OR (labels != theme AND labels != milestone))`;
       const data = await jiraAPI.searchIssues(jql, 0, 200);
-      const childStatusMap = {}; // { key: statusName }
-      for (const ch of (data.issues || [])) {
-        childStatusMap[ch.key] = ch.fields?.status?.name;
-      }
+      const validKeys = new Set((data.issues || []).map(i => i.key));
 
-      // Compute average State per parent and update DOM
-      for (const issue of issues) {
-        const linkedKeys = parentKeyMap[issue.key] || [];
-        const childProgresses = linkedKeys
-          .filter(k => childStatusMap[k] !== undefined)
-          .map(k => App.statusToProgress(childStatusMap[k]));
+      // Compute states for all children (epics resolved recursively)
+      await this._computeStatesForKeys([...validKeys]);
 
-        if (childProgresses.length === 0) continue;
-
-        const avg = Math.round(childProgresses.reduce((a, b) => a + b, 0) / childProgresses.length);
-        const steps = [0, 20, 40, 60, 80, 100];
-        const rounded = steps.reduce((prev, curr) => Math.abs(curr - avg) < Math.abs(prev - avg) ? curr : prev);
-
-        const row = container.querySelector(`.hierarchy-row[data-key="${issue.key}"]`);
-        if (!row) continue;
-        const stateEl = row.querySelector('[data-state-key]');
-        if (stateEl) {
-          stateEl.innerHTML = `<span class="progress-badge progress-${rounded}">${avg}%</span>`;
-          stateEl.title = `Average of ${childProgresses.length} children`;
-        }
+      // Compute milestone averages
+      for (const ms of milestones) {
+        const childKeys = (msToChildren[ms.key] || []).filter(k => validKeys.has(k));
+        const states = childKeys.map(k => this.computedStates[k]).filter(s => s !== undefined);
+        if (states.length === 0) continue;
+        const avg = Math.round(states.reduce((a, b) => a + b, 0) / states.length);
+        this.computedStates[ms.key] = avg;
+        this._updateStateBadge(container, ms.key, avg, states.length);
       }
     } catch (e) {
-      console.error('[State] Failed to load child states:', e.message);
+      console.error('[State] Failed to load milestone states:', e.message);
+    }
+  }
+
+  /**
+   * Async: load State for themes.
+   * Theme state = avg of milestones' computed states.
+   * Cascades: theme → milestones → tasks/epics → epic children.
+   */
+  async _loadThemeStates(themes, container) {
+    if (themes.length === 0) return;
+
+    // Collect milestone keys per theme
+    const themeToMsKeys = {};
+    const allMsKeys = new Set();
+    for (const theme of themes) {
+      const linkedKeys = this._extractLinkedKeys(theme);
+      themeToMsKeys[theme.key] = linkedKeys;
+      linkedKeys.forEach(k => allMsKeys.add(k));
+    }
+    if (allMsKeys.size === 0) return;
+
+    try {
+      // 1. Fetch milestones (need their issuelinks)
+      const msJql = `key in (${[...allMsKeys].join(',')}) AND labels = milestone`;
+      const msData = await jiraAPI.searchIssues(msJql, 0, 200);
+      const milestones = msData.issues || [];
+      const validMsKeys = new Set(milestones.map(m => m.key));
+
+      // 2. Collect task/epic keys from all milestones
+      const msToChildren = {};
+      const allChildKeys = new Set();
+      for (const ms of milestones) {
+        const childKeys = this._extractLinkedKeys(ms);
+        msToChildren[ms.key] = childKeys;
+        childKeys.forEach(k => allChildKeys.add(k));
+      }
+
+      // 3. Fetch and filter tasks/epics
+      if (allChildKeys.size > 0) {
+        const taskJql = `key in (${[...allChildKeys].join(',')}) AND (labels is EMPTY OR (labels != theme AND labels != milestone))`;
+        const taskData = await jiraAPI.searchIssues(taskJql, 0, 200);
+        const validChildKeys = new Set((taskData.issues || []).map(i => i.key));
+
+        // 4. Compute states for all tasks/epics (epics resolved recursively)
+        await this._computeStatesForKeys([...validChildKeys]);
+
+        // 5. Compute milestone states = avg of children's computed states
+        for (const ms of milestones) {
+          const childKeys = (msToChildren[ms.key] || []).filter(k => validChildKeys.has(k));
+          const states = childKeys.map(k => this.computedStates[k]).filter(s => s !== undefined);
+          if (states.length === 0) continue;
+          this.computedStates[ms.key] = Math.round(states.reduce((a, b) => a + b, 0) / states.length);
+        }
+      }
+
+      // 6. Compute theme states = avg of milestones' computed states
+      for (const theme of themes) {
+        const msKeys = (themeToMsKeys[theme.key] || []).filter(k => validMsKeys.has(k));
+        const states = msKeys.map(k => this.computedStates[k]).filter(s => s !== undefined);
+        if (states.length === 0) continue;
+        const avg = Math.round(states.reduce((a, b) => a + b, 0) / states.length);
+        this.computedStates[theme.key] = avg;
+        this._updateStateBadge(container, theme.key, avg, states.length);
+      }
+    } catch (e) {
+      console.error('[State] Failed to load theme states:', e.message);
     }
   }
 
