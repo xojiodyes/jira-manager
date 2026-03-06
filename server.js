@@ -385,7 +385,7 @@ async function generateDebugHierarchy(baseJql) {
                 stats.totalTasks++;
                 stats.totalProblems += taskNode.problems.length;
 
-                // 4. Load children for epics
+                // 4. Load children for epics (issuelinks + Epic Link)
                 taskNode.children = [];
                 if (isEpic) {
                   const epicRawLinks = (taskIssue.fields?.issuelinks || []).map(l => ({
@@ -399,15 +399,26 @@ async function generateDebugHierarchy(baseJql) {
                   const childJql = childKeys.length > 0
                     ? `key in (${childKeys.join(',')}) AND (labels is EMPTY OR (labels != theme AND labels != milestone)) ORDER BY updated DESC`
                     : null;
+
+                  // Epic Link query
+                  let epicLinkJql = `"Epic Link" = ${taskIssue.key} ORDER BY updated DESC`;
+                  let epicLinkKeys = [];
+                  let epicLinkFallback = null;
+
                   taskNode.childQuery = {
                     rawLinkedKeys: epicRawLinks,
                     extractedKeys: childAllKeys,
                     afterVisitedFilter: childKeys,
                     jql: childJql,
+                    epicLinkJql,
                     filter: 'labels != theme AND labels != milestone',
-                    resultCount: 0
+                    resultCount: 0,
+                    epicLinkCount: 0
                   };
 
+                  const childMap = new Map();
+
+                  // Fetch via issuelinks
                   if (childKeys.length > 0 && childJql) {
                     try {
                       const childResult = await jiraSearch(childJql);
@@ -415,15 +426,39 @@ async function generateDebugHierarchy(baseJql) {
                       taskNode.childQuery.returnedKeys = (childResult.issues || []).map(i => i.key);
                       taskNode.childQuery.filteredOut = childKeys.filter(k =>
                         !(childResult.issues || []).some(i => i.key === k));
+                      for (const ci of (childResult.issues || [])) childMap.set(ci.key, ci);
+                    } catch (e) { console.error(`[Debug] children link fetch error:`, e.message); }
+                  }
 
-                      for (const childIssue of (childResult.issues || [])) {
-                        visited.add(childIssue.key);
-                        const childNode = issueToDebugNode(childIssue, 'child');
-                        stats.totalLeafTasks++;
-                        stats.totalProblems += childNode.problems.length;
-                        taskNode.children.push(childNode);
-                      }
-                    } catch (e) { console.error(`[Debug] children fetch error:`, e.message); }
+                  // Fetch via Epic Link
+                  try {
+                    const elResult = await jiraSearch(epicLinkJql);
+                    epicLinkKeys = (elResult.issues || []).map(i => i.key);
+                    taskNode.childQuery.epicLinkCount = elResult.issues?.length || 0;
+                    taskNode.childQuery.epicLinkKeys = epicLinkKeys;
+                    for (const ci of (elResult.issues || [])) childMap.set(ci.key, ci);
+                  } catch (e) {
+                    // Fallback: parent = KEY
+                    try {
+                      epicLinkFallback = `parent = ${taskIssue.key} ORDER BY updated DESC`;
+                      const pResult = await jiraSearch(epicLinkFallback);
+                      epicLinkKeys = (pResult.issues || []).map(i => i.key);
+                      taskNode.childQuery.epicLinkJql = epicLinkFallback;
+                      taskNode.childQuery.epicLinkCount = pResult.issues?.length || 0;
+                      taskNode.childQuery.epicLinkKeys = epicLinkKeys;
+                      for (const ci of (pResult.issues || [])) childMap.set(ci.key, ci);
+                    } catch (e2) {
+                      taskNode.childQuery.epicLinkError = e.message;
+                    }
+                  }
+
+                  for (const childIssue of childMap.values()) {
+                    if (visited.has(childIssue.key)) continue;
+                    visited.add(childIssue.key);
+                    const childNode = issueToDebugNode(childIssue, 'child');
+                    stats.totalLeafTasks++;
+                    stats.totalProblems += childNode.problems.length;
+                    taskNode.children.push(childNode);
                   }
                 }
                 msNode.tasks.push(taskNode);
@@ -865,12 +900,30 @@ async function computeSnapshot(baseJql, mode = 'all') {
               broadcastSSE(snapshotState);
 
               const epicIssue = await jiraGetIssue(epic.key, doTrend); // with changelog only for trend
-              const childOutwardKeys = extractOutwardKeys(epicIssue);
 
+              // Collect children from issuelinks + Epic Link
+              const childMap = new Map();
+              const childOutwardKeys = extractOutwardKeys(epicIssue);
               if (childOutwardKeys.length > 0) {
                 const chJql = `key in (${childOutwardKeys.join(',')}) AND (labels is EMPTY OR (labels != theme AND labels != milestone)) ORDER BY updated DESC`;
                 const chData = await jiraSearch(chJql);
-                const children = chData.issues || [];
+                for (const ch of (chData.issues || [])) childMap.set(ch.key, ch);
+              }
+              // Epic Link children
+              try {
+                const elJql = `"Epic Link" = ${epic.key} ORDER BY updated DESC`;
+                const elData = await jiraSearch(elJql);
+                for (const ch of (elData.issues || [])) childMap.set(ch.key, ch);
+              } catch (e) {
+                try {
+                  const pJql = `parent = ${epic.key} ORDER BY updated DESC`;
+                  const pData = await jiraSearch(pJql);
+                  for (const ch of (pData.issues || [])) childMap.set(ch.key, ch);
+                } catch (e2) { /* no epic link support */ }
+              }
+
+              {
+                const children = [...childMap.values()];
                 const childDailyMaps = [];
 
                 const childGitList = [];
@@ -928,7 +981,9 @@ async function computeSnapshot(baseJql, mode = 'all') {
                 if (doTrend && childDevLists.length > 0) {
                   devResults[epic.key] = aggregateDevelopers(childDevLists);
                 }
-              } else {
+              }
+
+              if (children.length === 0) {
                 if (doTrend) {
                   // Leaf story/task — build daily progress
                   const epicDaily = buildDailyProgress(epicIssue, days);

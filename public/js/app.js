@@ -1267,21 +1267,45 @@ class App {
         if (link.inwardIssue) linkedKeys.push(link.inwardIssue.key);
       }
 
-      if (linkedKeys.length === 0) {
+      // Fetch issues from issuelinks + Epic Link children in parallel
+      const allIssues = new Map();
+
+      // 1. Fetch linked issues (if any)
+      if (linkedKeys.length > 0) {
+        const linkJql = `key in (${linkedKeys.join(',')}) AND (labels is EMPTY OR (labels != theme AND labels != milestone)) ORDER BY updated DESC`;
+        try {
+          const linkData = await jiraAPI.searchIssues(linkJql, 0, 200);
+          for (const issue of (linkData.issues || [])) allIssues.set(issue.key, issue);
+        } catch (e) { console.warn('Link search failed:', e.message); }
+      }
+
+      // 2. Fetch Epic Link children ("issues in epic")
+      try {
+        const epicChildJql = `"Epic Link" = ${issueKey} ORDER BY updated DESC`;
+        const epicChildData = await jiraAPI.searchIssues(epicChildJql, 0, 200);
+        for (const issue of (epicChildData.issues || [])) allIssues.set(issue.key, issue);
+      } catch (e) {
+        // Fallback: try parent = KEY (next-gen projects)
+        try {
+          const parentJql = `parent = ${issueKey} ORDER BY updated DESC`;
+          const parentData = await jiraAPI.searchIssues(parentJql, 0, 200);
+          for (const issue of (parentData.issues || [])) allIssues.set(issue.key, issue);
+        } catch (e2) { console.warn('Epic children search failed:', e2.message); }
+      }
+
+      const mergedIssues = [...allIssues.values()];
+
+      if (mergedIssues.length === 0) {
         container.classList.remove('loading-overlay');
         container.innerHTML = UI.renderEmpty('📋', 'No linked tasks');
         countEl.textContent = '';
         return;
       }
 
-      // Fetch linked issues excluding themes and milestones
-      const jql = `key in (${linkedKeys.join(',')}) AND (labels is EMPTY OR (labels != theme AND labels != milestone)) ORDER BY updated DESC`;
-      const data = await jiraAPI.searchIssues(jql, 0, 200);
       container.classList.remove('loading-overlay');
+      countEl.textContent = mergedIssues.length > 0 ? mergedIssues.length : '';
 
-      countEl.textContent = data.total > 0 ? data.total : '';
-
-      this.renderHierarchyTasks(container, data.issues, 'epicSubTasks');
+      this.renderHierarchyTasks(container, mergedIssues, 'epicSubTasks');
 
       // Keyboard: highlight first epic task
       this.highlightedIndex.epicTasks = data.issues.length > 0 ? 0 : -1;
@@ -1992,7 +2016,23 @@ class App {
           html += '</div>';
         }
       } else {
-        html += `<div class="debug-query-row"><span class="debug-query-muted">No keys to query</span></div>`;
+        html += `<div class="debug-query-row"><span class="debug-query-muted">No issuelink keys to query</span></div>`;
+      }
+
+      // Epic Link info
+      if (q.epicLinkJql) {
+        html += '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #e0e4ea">';
+        html += `<div class="debug-query-row"><span class="debug-query-label">Epic Link JQL:</span> <code class="debug-query-jql">${UI.escapeHtml(q.epicLinkJql)}</code></div>`;
+        if (q.epicLinkError) {
+          html += `<div class="debug-query-row debug-query-warn">Error: ${UI.escapeHtml(q.epicLinkError)}</div>`;
+        } else {
+          html += `<div class="debug-query-row"><span class="debug-query-label">Epic Link children:</span> ${q.epicLinkCount || 0} issues`;
+          if (q.epicLinkKeys && q.epicLinkKeys.length > 0) {
+            html += ' (' + q.epicLinkKeys.map(k => `<span class="debug-query-key">${UI.escapeHtml(k)}</span>`).join(' ') + ')';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
       }
 
       html += '</div>';
