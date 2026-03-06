@@ -1060,7 +1060,7 @@ class App {
             <span class="hierarchy-summary">${UI.escapeHtml(f.summary)}</span>
             <span class="hierarchy-items-count" title="Child items">${childCount}</span>
             <span class="hierarchy-devqa-count devqa-clickable" data-key="${issue.key}">${this._getDevQaInfo(issue.key).count || ''}</span>
-            <span class="hierarchy-sp-count">${f.customfield_10002 || ''}</span>
+            <span class="hierarchy-sp-count">${f.story_points ?? f.customfield_10002 ?? ''}</span>
             <span class="hierarchy-edit editable-field editable-status" data-key="${issue.key}" data-field="status">${this.getLocalField(issue.key, 'status') !== null ? this.getLocalField(issue.key, 'status') + '%' : '—'}</span>
             <span class="hierarchy-edit editable-field editable-confidence" data-key="${issue.key}" data-field="confidence">${this.getLocalField(issue.key, 'confidence') !== null ? this.getLocalField(issue.key, 'confidence') + '%' : '—'}</span>
             <span class="hierarchy-sparkline">${UI.renderSparkline(this.progressHistory[issue.key] || [], issue.key)}</span>
@@ -1470,7 +1470,7 @@ class App {
         html += `<td class="items-count-cell"><span class="devqa-clickable" data-key="${issue.key}">${dq.count || ''}</span></td>`;
       }
 
-      html += `<td class="items-count-cell">${f.customfield_10002 || ''}</td>`;
+      html += `<td class="items-count-cell">${f.story_points ?? f.customfield_10002 ?? ''}</td>`;
       html += `<td class="editable-cell"><span class="editable-field editable-status" data-key="${issue.key}" data-field="status">${this.getLocalField(issue.key, 'status') !== null ? this.getLocalField(issue.key, 'status') + '%' : '—'}</span></td>`;
       html += `<td class="editable-cell"><span class="editable-field editable-confidence" data-key="${issue.key}" data-field="confidence">${this.getLocalField(issue.key, 'confidence') !== null ? this.getLocalField(issue.key, 'confidence') + '%' : '—'}</span></td>`;
 
