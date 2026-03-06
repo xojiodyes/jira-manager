@@ -161,6 +161,236 @@ function extractOutwardKeys(issue) {
   return keys;
 }
 
+// ============================================================
+// DEBUG HIERARCHY
+// ============================================================
+
+const EXCLUDED_LINK_TYPES = ['cloners', 'duplicate'];
+
+function annotateLinks(issue, level) {
+  const links = issue.fields?.issuelinks || [];
+  const annotated = [];
+  let usedCount = 0, ignoredCount = 0, outwardCount = 0, inwardCount = 0;
+
+  for (const link of links) {
+    const typeName = (link.type?.name || '').toLowerCase();
+    const isExcluded = EXCLUDED_LINK_TYPES.some(ex => typeName.includes(ex));
+    const isOutward = !!link.outwardIssue;
+    const isInward = !!link.inwardIssue;
+    const target = link.outwardIssue || link.inwardIssue;
+    if (!target) continue;
+
+    if (isOutward) outwardCount++;
+    if (isInward) inwardCount++;
+
+    let used = false;
+    let reason = '';
+    if (isExcluded) {
+      reason = `excluded: ${link.type?.name}`;
+      ignoredCount++;
+    } else {
+      used = true;
+      usedCount++;
+      reason = 'used';
+    }
+
+    annotated.push({
+      direction: isOutward ? 'outward' : 'inward',
+      typeName: link.type?.name || 'Unknown',
+      typeOutward: link.type?.outward || '',
+      typeInward: link.type?.inward || '',
+      targetKey: target.key,
+      targetSummary: target.fields?.summary || '',
+      targetType: target.fields?.issuetype?.name || '',
+      targetLabels: target.fields?.labels || [],
+      targetStatus: target.fields?.status?.name || '',
+      used,
+      reason
+    });
+  }
+
+  return { all: annotated, usedCount, ignoredCount, outwardCount, inwardCount };
+}
+
+function detectProblems(issue, level) {
+  const problems = [];
+  const links = issue.fields?.issuelinks || [];
+
+  const outwardValid = links.filter(l => l.outwardIssue &&
+    !EXCLUDED_LINK_TYPES.some(ex => (l.type?.name || '').toLowerCase().includes(ex)));
+  const inwardValid = links.filter(l => l.inwardIssue &&
+    !EXCLUDED_LINK_TYPES.some(ex => (l.type?.name || '').toLowerCase().includes(ex)));
+
+  // Children only via inward direction
+  if (outwardValid.length === 0 && inwardValid.length > 0 && level !== 'child') {
+    problems.push({
+      type: 'inward_only_children',
+      severity: 'warning',
+      message: `${inwardValid.length} linked issues only via inward direction (not counted in Items badge)`
+    });
+  }
+
+  // Excluded links
+  const excluded = links.filter(l => {
+    const typeName = (l.type?.name || '').toLowerCase();
+    return EXCLUDED_LINK_TYPES.some(ex => typeName.includes(ex));
+  });
+  if (excluded.length > 0) {
+    problems.push({
+      type: 'excluded_link',
+      severity: 'info',
+      message: `${excluded.length} links excluded (${[...new Set(excluded.map(l => l.type?.name))].join(', ')})`
+    });
+  }
+
+  // Label mismatch
+  if (level === 'task' || level === 'child') {
+    const labels = (issue.fields?.labels || []).map(l => l.toLowerCase());
+    if (labels.includes('theme') || labels.includes('milestone')) {
+      const badLabel = labels.find(l => l === 'theme' || l === 'milestone');
+      problems.push({
+        type: 'label_mismatch',
+        severity: 'error',
+        message: `Has label "${badLabel}" but appears at ${level} level`
+      });
+    }
+  }
+
+  return problems;
+}
+
+function issueToDebugNode(issue, level) {
+  const f = issue.fields || {};
+  return {
+    key: issue.key,
+    summary: f.summary || '',
+    status: f.status?.name || '',
+    statusCategory: f.status?.statusCategory?.key || '',
+    issuetype: f.issuetype?.name || '',
+    labels: f.labels || [],
+    links: annotateLinks(issue, level),
+    problems: detectProblems(issue, level)
+  };
+}
+
+async function generateDebugHierarchy(baseJql) {
+  const visited = new Set();
+  const stats = {
+    totalThemes: 0, totalMilestones: 0, totalTasks: 0,
+    totalEpics: 0, totalLeafTasks: 0, totalProblems: 0, totalOrphans: 0
+  };
+
+  // 1. Load themes
+  let themeJql = 'labels = theme';
+  if (baseJql) {
+    const orderMatch = baseJql.match(/^(.*?)\s*(ORDER\s+BY\s+.*)$/i);
+    if (orderMatch) {
+      const conditions = orderMatch[1].trim();
+      const orderBy = orderMatch[2];
+      themeJql = conditions
+        ? `labels = theme AND ${conditions} ${orderBy}`
+        : `labels = theme ${orderBy}`;
+    } else {
+      themeJql = `labels = theme AND ${baseJql}`;
+    }
+  }
+
+  const themesResult = await jiraSearch(themeJql);
+  const themes = [];
+
+  for (const themeIssue of (themesResult.issues || [])) {
+    visited.add(themeIssue.key);
+    const themeNode = issueToDebugNode(themeIssue, 'theme');
+    stats.totalThemes++;
+    stats.totalProblems += themeNode.problems.length;
+
+    // 2. Load milestones for this theme
+    const allLinkedKeys = extractLinkedKeys(themeIssue, true);
+    const milestoneKeys = allLinkedKeys.filter(k => !visited.has(k));
+    themeNode.milestones = [];
+
+    if (milestoneKeys.length > 0) {
+      const msJql = `key in (${milestoneKeys.join(',')}) AND labels = milestone ORDER BY updated DESC`;
+      try {
+        const msResult = await jiraSearch(msJql);
+        for (const msIssue of (msResult.issues || [])) {
+          visited.add(msIssue.key);
+          const msNode = issueToDebugNode(msIssue, 'milestone');
+          stats.totalMilestones++;
+          stats.totalProblems += msNode.problems.length;
+
+          // 3. Load tasks for this milestone
+          const taskLinkedKeys = extractLinkedKeys(msIssue, true).filter(k => !visited.has(k));
+          msNode.tasks = [];
+
+          if (taskLinkedKeys.length > 0) {
+            const taskJql = `key in (${taskLinkedKeys.join(',')}) AND (labels is EMPTY OR (labels != theme AND labels != milestone)) ORDER BY updated DESC`;
+            try {
+              const taskResult = await jiraSearch(taskJql);
+              for (const taskIssue of (taskResult.issues || [])) {
+                visited.add(taskIssue.key);
+                const taskNode = issueToDebugNode(taskIssue, 'task');
+                const isEpic = taskIssue.fields?.issuetype?.name === 'Epic' ||
+                  (taskNode.links.outwardCount > 0);
+                if (isEpic) stats.totalEpics++;
+                else stats.totalLeafTasks++;
+                stats.totalTasks++;
+                stats.totalProblems += taskNode.problems.length;
+
+                // 4. Load children for epics
+                taskNode.children = [];
+                if (isEpic) {
+                  const childKeys = extractLinkedKeys(taskIssue, true).filter(k => !visited.has(k));
+                  if (childKeys.length > 0) {
+                    const childJql = `key in (${childKeys.join(',')}) AND (labels is EMPTY OR (labels != theme AND labels != milestone)) ORDER BY updated DESC`;
+                    try {
+                      const childResult = await jiraSearch(childJql);
+                      for (const childIssue of (childResult.issues || [])) {
+                        visited.add(childIssue.key);
+                        const childNode = issueToDebugNode(childIssue, 'child');
+                        stats.totalLeafTasks++;
+                        stats.totalProblems += childNode.problems.length;
+                        taskNode.children.push(childNode);
+                      }
+                    } catch (e) { console.error(`[Debug] children fetch error:`, e.message); }
+                  }
+                }
+                msNode.tasks.push(taskNode);
+              }
+            } catch (e) { console.error(`[Debug] tasks fetch error:`, e.message); }
+          }
+          themeNode.milestones.push(msNode);
+        }
+      } catch (e) { console.error(`[Debug] milestones fetch error:`, e.message); }
+    }
+    themes.push(themeNode);
+  }
+
+  // 5. Detect orphans - get all project issues and subtract visited
+  let orphans = [];
+  try {
+    let orphanJql = baseJql || '';
+    if (!orphanJql) {
+      // Get projects from themes
+      const projects = [...new Set((themesResult.issues || []).map(i => i.fields?.project?.key).filter(Boolean))];
+      if (projects.length > 0) {
+        orphanJql = `project in (${projects.join(',')}) ORDER BY updated DESC`;
+      }
+    }
+    if (orphanJql) {
+      const allResult = await jiraSearch(orphanJql);
+      for (const issue of (allResult.issues || [])) {
+        if (!visited.has(issue.key)) {
+          orphans.push(issueToDebugNode(issue, 'orphan'));
+        }
+      }
+      stats.totalOrphans = orphans.length;
+    }
+  } catch (e) { console.error(`[Debug] orphan detection error:`, e.message); }
+
+  return { themes, statistics: stats, orphans };
+}
+
 // Fetch git dev-status for an issue (Jira Data Center)
 // Returns structured object: { lastActivity, prCount, prMerged, prOpen, repoCount, commitCount }
 async function fetchDevStatus(issueId) {
@@ -1264,6 +1494,22 @@ const server = http.createServer((req, res) => {
       })
       .catch(err => {
         console.error('Roadmap export error:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      });
+    return;
+  }
+
+  // Debug hierarchy
+  if (pathname === '/api/debug/hierarchy' && req.method === 'GET') {
+    const baseJql = parsedUrl.query?.jql || '';
+    generateDebugHierarchy(baseJql)
+      .then(data => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
+      })
+      .catch(err => {
+        console.error('[Debug] hierarchy error:', err);
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message }));
       });

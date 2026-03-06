@@ -16,6 +16,7 @@
           <h2 id="pageTitle">Hierarchy</h2>
         </div>
         <div class="header-right">
+          <button class="btn btn-secondary btn-sm" id="debugPanelBtn" title="Debug hierarchy links">🔬 Debug</button>
           <button class="btn btn-secondary btn-sm" id="exportRoadmapBtn" title="Export roadmap to Excel">📊 Export</button>
           <button class="btn btn-secondary btn-sm" id="snapshotTrendBtn" title="Snapshot progress trends">📈 Trend</button>
           <button class="btn btn-secondary btn-sm" id="snapshotGitBtn" title="Snapshot git activity">🔀 Git</button>
@@ -162,6 +163,22 @@
           <div class="modal-footer">
             <button class="btn btn-secondary" id="cancelAddJqlBtn">Cancel</button>
             <button class="btn btn-primary" id="saveJqlBtn">💾 Save</button>
+          </div>
+        </div>
+      </div>
+      <!-- Debug/Diagnostics Modal -->
+      <div class="modal" id="debugModal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-xl">
+          <div class="modal-header">
+            <h3>Hierarchy Diagnostics</h3>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button class="btn btn-secondary btn-sm" id="debugRefreshBtn">Refresh</button>
+              <button class="modal-close" id="closeDebugModal">✕</button>
+            </div>
+          </div>
+          <div class="modal-body" id="debugModalBody">
+            <div class="loading"><div class="spinner"></div></div>
           </div>
         </div>
       </div>

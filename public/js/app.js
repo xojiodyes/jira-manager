@@ -186,7 +186,6 @@ class App {
   }
 
   async saveLocalField(issueKey, field, value) {
-    console.log('[saveLocalField] Saving:', issueKey, field, value);
     try {
       const res = await fetch('/api/data', {
         method: 'POST',
@@ -194,7 +193,6 @@ class App {
         body: JSON.stringify({ issueKey, field, value })
       });
       const result = await res.json();
-      console.log('[saveLocalField] Response:', result);
       if (result.ok) {
         if (!this.localData[issueKey]) this.localData[issueKey] = {};
         this.localData[issueKey][field] = value;
@@ -381,6 +379,17 @@ class App {
     });
     document.getElementById('snapshotGitBtn').addEventListener('click', () => {
       this.startSnapshot('git');
+    });
+
+    // Debug panel
+    document.getElementById('debugPanelBtn').addEventListener('click', () => {
+      this.openDebugPanel();
+    });
+    document.getElementById('closeDebugModal').addEventListener('click', () => {
+      UI.closeModal('debugModal');
+    });
+    document.getElementById('debugRefreshBtn').addEventListener('click', () => {
+      this.openDebugPanel();
     });
 
     // JQL selector
@@ -1704,7 +1713,6 @@ class App {
 
     const save = async () => {
       const raw = input.value.trim();
-      console.log('[save] raw value:', raw, 'issueKey:', issueKey, 'field:', field);
       if (raw === '') {
         restoreContent(currentValue);
         return true; // skip = success (empty means skip)
@@ -1715,7 +1723,6 @@ class App {
         restoreContent(currentValue);
         return false;
       }
-      console.log('[save] Calling saveLocalField with val:', val);
       await this.saveLocalField(issueKey, field, val);
       restoreContent(val);
       return true;
@@ -1801,6 +1808,214 @@ class App {
       .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
     if (entries.length === 0) return [];
     return entries.map(h => ({ progress: h.newValue, date: h.timestamp.slice(0, 10) }));
+  }
+
+  // ============================================================
+  // DEBUG PANEL
+  // ============================================================
+
+  async openDebugPanel() {
+    UI.openModal('debugModal');
+    const body = document.getElementById('debugModalBody');
+    body.innerHTML = UI.renderLoading();
+
+    try {
+      const jql = this.getSelectedJql() || this.serverConfig?.hierarchyJql || '';
+      const params = jql ? `?jql=${encodeURIComponent(jql)}` : '';
+      const res = await fetch(`/api/debug/hierarchy${params}`);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      this._debugData = data;
+      this._debugExpanded = new Set();
+      this._renderDebugPanel(data);
+    } catch (err) {
+      body.innerHTML = UI.renderError(err.message);
+    }
+  }
+
+  _renderDebugPanel(data) {
+    const body = document.getElementById('debugModalBody');
+    let html = '';
+
+    // Summary
+    html += UI.renderDebugSummary(data.statistics);
+
+    // Filters
+    html += `<div class="debug-filters">
+      <span style="color:var(--color-text-secondary);font-size:12px">Show:</span>
+      <button class="debug-filter active" data-filter="all">All</button>
+      <button class="debug-filter" data-filter="problems">Problems only</button>
+    </div>`;
+
+    // Tree
+    html += '<div class="debug-tree">';
+    for (const theme of data.themes) {
+      html += this._renderDebugNode(theme, 'theme');
+    }
+    html += '</div>';
+
+    // Orphans
+    html += UI.renderDebugOrphans(data.orphans);
+
+    body.innerHTML = html;
+    this._bindDebugEvents(body);
+  }
+
+  _getTypeClass(issuetype) {
+    const t = (issuetype || '').toLowerCase();
+    if (t === 'epic') return 'type-epic';
+    if (t === 'story') return 'type-story';
+    if (t === 'task') return 'type-task';
+    if (t === 'bug') return 'type-bug';
+    if (t.includes('sub-task') || t.includes('subtask')) return 'type-sub-task';
+    return 'type-default';
+  }
+
+  _renderDebugNode(node, level) {
+    const expanded = this._debugExpanded.has(node.key);
+    const hasChildren = (level === 'theme' && node.milestones?.length > 0) ||
+      (level === 'milestone' && node.tasks?.length > 0) ||
+      (level === 'task' && node.children?.length > 0);
+    const hasProblems = node.problems.length > 0;
+    const problemCount = this._countAllProblems(node, level);
+
+    let html = `<div class="debug-tree-node level-${level}" data-key="${UI.escapeHtml(node.key)}" data-has-problems="${hasProblems || problemCount > 0}">`;
+
+    // Header
+    html += `<div class="debug-node-header" data-key="${UI.escapeHtml(node.key)}">`;
+    html += `<span class="debug-toggle${expanded ? ' expanded' : ''}">${hasChildren || node.links.all.length > 0 ? '&#9654;' : '&nbsp;'}</span>`;
+    html += `<span class="debug-node-type ${this._getTypeClass(node.issuetype)}">${(node.issuetype || '?')[0]}</span>`;
+    html += `<span class="debug-node-key">${UI.escapeHtml(node.key)}</span>`;
+    html += `<span class="debug-node-summary">${UI.escapeHtml(node.summary)}</span>`;
+
+    // Badges
+    html += '<span class="debug-node-badges">';
+    if (node.status) {
+      const cls = UI.getStatusClass(node.statusCategory);
+      html += `<span class="status-badge ${cls}" style="font-size:10px;padding:1px 5px">${UI.escapeHtml(node.status)}</span>`;
+    }
+    if (hasProblems) {
+      for (const p of node.problems) {
+        const cls = p.severity === 'error' ? 'debug-badge-error' : p.severity === 'warning' ? 'debug-badge-warning' : 'debug-badge-info';
+        html += `<span class="debug-badge ${cls}">${UI.escapeHtml(p.type)}</span>`;
+      }
+    }
+    html += '</span>';
+
+    // Links info
+    html += `<span class="debug-node-links-info">${node.links.all.length}L ${node.links.outwardCount}out ${node.links.inwardCount}in</span>`;
+    html += '</div>';
+
+    // Details (expanded content)
+    html += `<div class="debug-details${expanded ? ' open' : ''}" data-key="${UI.escapeHtml(node.key)}">`;
+
+    // Problems
+    if (hasProblems) {
+      html += '<div class="debug-problems">';
+      for (const p of node.problems) {
+        const icon = p.severity === 'error' ? '&#x26D4;' : p.severity === 'warning' ? '&#x26A0;' : '&#x2139;';
+        html += `<div class="debug-problem-item">${icon} ${UI.escapeHtml(p.message)}</div>`;
+      }
+      html += '</div>';
+    }
+
+    // Links table
+    if (node.links.all.length > 0) {
+      html += '<table class="debug-links-table"><thead><tr>';
+      html += '<th>Dir</th><th>Type</th><th>Target</th><th>Target Type</th><th>Labels</th><th>Status</th>';
+      html += '</tr></thead><tbody>';
+      for (const link of node.links.all) {
+        const dirIcon = link.direction === 'outward' ? '&#x2192;' : '&#x2190;';
+        const dirClass = link.direction;
+        const statusClass = link.used ? 'debug-link-used' : 'debug-link-ignored';
+        html += '<tr>';
+        html += `<td class="debug-link-dir ${dirClass}">${dirIcon}</td>`;
+        html += `<td>${UI.escapeHtml(link.typeName)}</td>`;
+        html += `<td><span class="debug-node-key">${UI.escapeHtml(link.targetKey)}</span> ${UI.escapeHtml(link.targetSummary)}</td>`;
+        html += `<td>${UI.escapeHtml(link.targetType)}</td>`;
+        html += `<td>${(link.targetLabels || []).join(', ')}</td>`;
+        html += `<td class="${statusClass}">${UI.escapeHtml(link.reason)}</td>`;
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+    }
+
+    // Nested children
+    if (level === 'theme' && node.milestones) {
+      for (const ms of node.milestones) {
+        html += this._renderDebugNode(ms, 'milestone');
+      }
+    }
+    if (level === 'milestone' && node.tasks) {
+      for (const task of node.tasks) {
+        html += this._renderDebugNode(task, 'task');
+      }
+    }
+    if (level === 'task' && node.children) {
+      for (const child of node.children) {
+        html += this._renderDebugNode(child, 'child');
+      }
+    }
+
+    html += '</div>'; // details
+    html += '</div>'; // tree-node
+    return html;
+  }
+
+  _countAllProblems(node, level) {
+    let count = node.problems.length;
+    if (level === 'theme' && node.milestones) {
+      for (const ms of node.milestones) count += this._countAllProblems(ms, 'milestone');
+    }
+    if (level === 'milestone' && node.tasks) {
+      for (const task of node.tasks) count += this._countAllProblems(task, 'task');
+    }
+    if (level === 'task' && node.children) {
+      for (const child of node.children) count += this._countAllProblems(child, 'child');
+    }
+    return count;
+  }
+
+  _bindDebugEvents(container) {
+    // Toggle expand/collapse
+    container.querySelectorAll('.debug-node-header').forEach(header => {
+      header.addEventListener('click', () => {
+        const key = header.dataset.key;
+        const details = header.nextElementSibling;
+        const toggle = header.querySelector('.debug-toggle');
+        if (!details) return;
+
+        if (this._debugExpanded.has(key)) {
+          this._debugExpanded.delete(key);
+          details.classList.remove('open');
+          if (toggle) toggle.classList.remove('expanded');
+        } else {
+          this._debugExpanded.add(key);
+          details.classList.add('open');
+          if (toggle) toggle.classList.add('expanded');
+        }
+      });
+    });
+
+    // Filter buttons
+    container.querySelectorAll('.debug-filter').forEach(btn => {
+      btn.addEventListener('click', () => {
+        container.querySelectorAll('.debug-filter').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const filter = btn.dataset.filter;
+
+        container.querySelectorAll('.debug-tree-node').forEach(node => {
+          if (filter === 'problems') {
+            node.style.display = node.dataset.hasProblems === 'true' ? '' : 'none';
+          } else {
+            node.style.display = '';
+          }
+        });
+      });
+    });
   }
 }
 

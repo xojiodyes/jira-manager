@@ -582,6 +582,46 @@ const UI = {
     return result;
   },
 
+  // ============================================================
+  // DEBUG PANEL HELPERS
+  // ============================================================
+
+  renderDebugSummary(stats) {
+    const items = [
+      { value: stats.totalThemes, label: 'Themes' },
+      { value: stats.totalMilestones, label: 'Milestones' },
+      { value: stats.totalTasks, label: 'Tasks' },
+      { value: stats.totalEpics, label: 'Epics' },
+      { value: stats.totalLeafTasks, label: 'Leaf' },
+      { value: stats.totalProblems, label: 'Problems', warn: true },
+      { value: stats.totalOrphans, label: 'Orphans', warn: true }
+    ];
+    return `<div class="debug-summary">${items.map(s =>
+      `<div class="debug-stat">
+        <span class="debug-stat-value${s.warn && s.value > 0 ? ' has-problems' : ''}">${s.value}</span>
+        <span class="debug-stat-label">${s.label}</span>
+      </div>`
+    ).join('')}</div>`;
+  },
+
+  renderDebugOrphans(orphans) {
+    if (!orphans || orphans.length === 0) return '';
+    let html = '<div class="debug-orphans">';
+    html += `<h4>Orphaned Issues (${orphans.length})</h4>`;
+    for (const o of orphans) {
+      const labels = (o.labels || []).join(', ');
+      html += `<div class="debug-orphan-row">
+        <span class="debug-node-key">${this.escapeHtml(o.key)}</span>
+        <span class="debug-node-summary">${this.escapeHtml(o.summary)}</span>
+        <span style="color:var(--color-text-muted);font-size:11px">${this.escapeHtml(o.issuetype)}</span>
+        ${labels ? `<span style="color:var(--color-text-muted);font-size:11px">[${this.escapeHtml(labels)}]</span>` : ''}
+        <span style="color:var(--color-text-muted);font-size:11px">${o.links.all.length} links</span>
+      </div>`;
+    }
+    html += '</div>';
+    return html;
+  },
+
   _renderLargeSparkline(dataPoints, width, height) {
     const pad = 4;
     const w = width - pad * 2;
