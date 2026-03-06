@@ -1465,7 +1465,7 @@ class App {
       }
 
       if (showItemsCount) {
-        html += `<td class="items-count-cell">${childCount || ''}</td>`;
+        html += `<td class="items-count-cell"><span class="hierarchy-items-count" title="Child items">${childCount || ''}</span></td>`;
         const dq = this._getDevQaInfo(issue.key);
         html += `<td class="items-count-cell"><span class="devqa-clickable" data-key="${issue.key}">${dq.count || ''}</span></td>`;
       }
