@@ -116,7 +116,7 @@ class JiraAPI {
    * Search issues by JQL
    */
   async searchIssues(jql, startAt = 0, maxResults = 50, extraFields = '') {
-    const fields = 'summary,status,assignee,priority,issuetype,created,updated,project,description,comment,labels,issuelinks,customfield_10002,story_points' + (extraFields ? ',' + extraFields : '');
+    const fields = 'summary,status,assignee,priority,issuetype,created,updated,project,description,comment,labels,issuelinks,customfield_10002,story_points,duedate,customfield_18801' + (extraFields ? ',' + extraFields : '');
     const params = new URLSearchParams({
       jql,
       startAt,
