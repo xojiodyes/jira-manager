@@ -850,6 +850,7 @@ class App {
     this.selectedThemeKey = issueKey;
     this.selectedMilestoneKey = null;
     this.selectedMilestoneProject = null;
+    this.updateTableModes('theme');
 
     // Highlight selected theme
     document.querySelectorAll('#themesContainer .hierarchy-row').forEach(row => {
@@ -933,6 +934,7 @@ class App {
 
   async selectMilestone(issueKey) {
     this.selectedMilestoneKey = issueKey;
+    this.updateTableModes('milestone');
 
     // Highlight selected milestone
     document.querySelectorAll('#milestonesContainer .hierarchy-row').forEach(row => {
@@ -1270,14 +1272,14 @@ class App {
       return;
     }
 
-    let html = `<div class="hierarchy-list">
+    let html = `<div class="hierarchy-list" data-panel="${level}">
       <div class="hierarchy-list-header">
         <span class="hlh-detail"></span>
         <span class="hlh-key">Key</span>
         <span class="hlh-summary">Summary</span>
         <span class="hlh-count">Items</span>
-        <span class="hlh-count">#D/Q</span>
-        <span class="hlh-count">SP</span>
+        <span class="hlh-count hlh-devqa">#D/Q</span>
+        <span class="hlh-count hlh-sp">SP</span>
         <span class="hlh-edit">S%</span>
         <span class="hlh-edit">C%</span>
         <span class="hlh-state">State</span>
@@ -1356,6 +1358,17 @@ class App {
           this.selectMilestone(key);
         }
       });
+    });
+  }
+
+  // === TABLE MODE (detailed / simplified) ===
+
+  updateTableModes(focusedPanel) {
+    document.querySelectorAll('.hierarchy-list[data-panel="theme"]').forEach(el => {
+      el.classList.toggle('simplified', focusedPanel !== 'theme');
+    });
+    document.querySelectorAll('.hierarchy-list[data-panel="milestone"]').forEach(el => {
+      el.classList.toggle('simplified', focusedPanel !== 'milestone');
     });
   }
 
