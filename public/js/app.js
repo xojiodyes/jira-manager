@@ -1332,11 +1332,16 @@ class App {
         ddateText = this._fmtShortDate(targetDate);
       }
 
+      // State: use cache first, fallback to Jira status
+      const stateVal = this.computedStates[issue.key] ?? App.statusToProgress(f.status?.name);
+      const stateRounded = stateVal ? [0,20,40,60,80,100].reduce((p,c) => Math.abs(c-stateVal)<Math.abs(p-stateVal)?c:p) : 0;
+      const stateBadge = stateVal ? `<span class="progress-badge progress-${stateRounded}">${stateVal}%</span>` : '';
+
       html += `
         <div class="hierarchy-row" data-key="${issue.key}" data-level="${level}">
           <div class="hierarchy-row-main">
             <span class="hierarchy-detail-btn" data-key="${issue.key}" title="View details">👁</span>
-            <span class="hierarchy-state" data-state-key="${issue.key}">${App.statusToProgress(f.status?.name) ? `<span class="progress-badge progress-${App.statusToProgress(f.status?.name)}">${App.statusToProgress(f.status?.name)}%</span>` : ''}</span>
+            <span class="hierarchy-state" data-state-key="${issue.key}">${stateBadge}</span>
             <a href="${jiraAPI.getIssueUrl(issue.key)}" target="_blank" class="issue-key" onclick="event.stopPropagation()" title="Open in Jira">${issue.key}</a>
             <span class="hierarchy-summary">${UI.escapeHtml(f.summary)}</span>
             <span class="hierarchy-items-count" title="Child items">${childCount}</span>
