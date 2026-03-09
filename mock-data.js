@@ -110,7 +110,7 @@ const ISSUES = [
   {
     id: '10012', key: 'PROJ-12',
     fields: {
-      summary: 'Q1 2026 Release',
+      summary: 'Q1 2026 Release — авторизация, критические багфиксы и интеграция с внешними сервисами',
       description: 'Milestone для первого квартала 2026. Включает основные фичи авторизации и критические багфиксы.',
       status: STATUSES.inProgress,
       assignee: USERS.ivan,
@@ -131,7 +131,7 @@ const ISSUES = [
   {
     id: '10013', key: 'PROJ-13',
     fields: {
-      summary: 'Q2 2026 Planning',
+      summary: 'Q2 2026 Planning — пагинация, модуль оплаты и рефакторинг платформы',
       description: 'Milestone для второго квартала. Включает пагинацию и модуль оплаты.',
       status: STATUSES.todo,
       assignee: USERS.anna,
@@ -152,7 +152,7 @@ const ISSUES = [
   {
     id: '10014', key: 'PROJ-14',
     fields: {
-      summary: 'MVP Демо-продукт',
+      summary: 'MVP Демо-продукт — landing page, мобильные баги и подготовка к презентации инвесторам',
       description: 'Milestone для MVP демо-продукта. Landing page и исправление мобильных багов.',
       status: STATUSES.inProgress,
       assignee: USERS.anna,
