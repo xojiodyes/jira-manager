@@ -1055,6 +1055,8 @@ a:hover {
   height: calc(50vh - var(--header-height) / 2 - 24px);
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .hierarchy-row-middle {
@@ -1077,6 +1079,8 @@ a:hover {
 
 .hierarchy-panel .card-body {
   flex: 1;
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   position: relative;
   transition: opacity 0.15s;
