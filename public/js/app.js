@@ -2197,6 +2197,13 @@ class App {
 
     // Badges
     html += '<span class="debug-node-badges">';
+    if (node.stateInfo) {
+      const si = node.stateInfo;
+      const steps = [0, 20, 40, 60, 80, 100];
+      const rounded = steps.reduce((prev, curr) => Math.abs(curr - si.computedState) < Math.abs(prev - si.computedState) ? curr : prev);
+      const label = si.source === 'children_avg' ? `${si.computedState}% avg` : `${si.computedState}%`;
+      html += `<span class="progress-badge progress-${rounded}" style="font-size:10px;padding:1px 5px" title="State: ${label}">${label}</span>`;
+    }
     if (node.status) {
       const cls = UI.getStatusClass(node.statusCategory);
       html += `<span class="status-badge ${cls}" style="font-size:10px;padding:1px 5px">${UI.escapeHtml(node.status)}</span>`;
@@ -2313,6 +2320,43 @@ class App {
           html += '</div>';
         }
         html += '</div>';
+      }
+
+      html += '</div>';
+    }
+
+    // State computation details
+    if (node.stateInfo) {
+      const si = node.stateInfo;
+      html += '<div class="debug-query-info">';
+      html += '<div class="debug-query-title">State computation</div>';
+
+      // Own Jira status → state
+      html += `<div class="debug-query-row"><span class="debug-query-label">Jira status:</span> ${UI.escapeHtml(si.ownStatus || '—')} → <strong>${si.ownState}%</strong></div>`;
+
+      if (si.source === 'children_avg' && si.childStates.length > 0) {
+        // Show children breakdown
+        html += `<div class="debug-query-row"><span class="debug-query-label">Source:</span> average of <strong>${si.childStates.length}</strong> children</div>`;
+        html += '<div class="debug-state-children">';
+        html += '<table class="debug-links-table"><thead><tr><th>Key</th><th>Jira Status</th><th>State</th></tr></thead><tbody>';
+        for (const cs of si.childStates) {
+          const steps = [0, 20, 40, 60, 80, 100];
+          const r = steps.reduce((prev, curr) => Math.abs(curr - cs.state) < Math.abs(prev - cs.state) ? curr : prev);
+          html += `<tr>`;
+          html += `<td><span class="debug-node-key">${UI.escapeHtml(cs.key)}</span></td>`;
+          html += `<td>${UI.escapeHtml(cs.status || '—')}</td>`;
+          html += `<td><span class="progress-badge progress-${r}" style="font-size:10px;padding:1px 4px">${cs.state}%</span></td>`;
+          html += `</tr>`;
+        }
+        html += '</tbody></table>';
+        html += '</div>';
+
+        // Final result
+        const steps = [0, 20, 40, 60, 80, 100];
+        const rounded = steps.reduce((prev, curr) => Math.abs(curr - si.computedState) < Math.abs(prev - si.computedState) ? curr : prev);
+        html += `<div class="debug-query-row"><span class="debug-query-label">Computed state:</span> <span class="progress-badge progress-${rounded}" style="font-size:11px;padding:1px 6px"><strong>${si.computedState}%</strong></span> (own: ${si.ownState}%)</div>`;
+      } else {
+        html += `<div class="debug-query-row"><span class="debug-query-label">Source:</span> own status (no children or leaf)</div>`;
       }
 
       html += '</div>';
