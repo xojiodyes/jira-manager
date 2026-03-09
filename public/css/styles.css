@@ -1042,6 +1042,11 @@ a:hover {
 .hierarchy-row-top .hierarchy-panel {
   flex: 1;
   min-width: 0;
+  transition: flex 0.3s ease;
+}
+
+.hierarchy-row-top .hierarchy-panel.panel-simplified {
+  flex: 0.54;
 }
 
 .hierarchy-row-top .hierarchy-panel .card {

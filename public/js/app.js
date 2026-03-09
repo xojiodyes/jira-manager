@@ -1375,6 +1375,19 @@ class App {
         }
       });
     });
+
+    // Sync panel width class after render
+    if (level === 'theme' || level === 'milestone') {
+      this._syncPanelWidths();
+    }
+  }
+
+  _syncPanelWidths() {
+    const panels = document.querySelectorAll('.hierarchy-row-top .hierarchy-panel');
+    if (panels.length >= 2) {
+      panels[0].classList.toggle('panel-simplified', this.focusedPanel !== 'theme');
+      panels[1].classList.toggle('panel-simplified', this.focusedPanel !== 'milestone');
+    }
   }
 
   // === TABLE MODE (detailed / simplified) ===
@@ -1387,6 +1400,12 @@ class App {
     document.querySelectorAll('.hierarchy-list[data-panel="milestone"]').forEach(el => {
       el.classList.toggle('simplified', focusedPanel !== 'milestone');
     });
+    // Toggle panel width
+    const panels = document.querySelectorAll('.hierarchy-row-top .hierarchy-panel');
+    if (panels.length >= 2) {
+      panels[0].classList.toggle('panel-simplified', focusedPanel !== 'theme');
+      panels[1].classList.toggle('panel-simplified', focusedPanel !== 'milestone');
+    }
   }
 
   // === CREATE FORMS ===
