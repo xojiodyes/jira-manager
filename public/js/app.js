@@ -1038,7 +1038,7 @@ class App {
         stateEl.className = `progress-badge progress-${rounded}`;
         stateEl.textContent = `${avg}%`;
       }
-      stateEl.title = `Average of ${childCount} children`;
+      if (childCount > 0) stateEl.title = `Average of ${childCount} children`;
     }
   }
 
@@ -1166,6 +1166,16 @@ class App {
   async _loadMilestoneStates(milestones, container) {
     if (milestones.length === 0) return;
 
+    // Check if all milestones are already cached
+    const uncachedMs = milestones.filter(ms => this.computedStates[ms.key] === undefined);
+    if (uncachedMs.length === 0) {
+      // All cached — just render badges
+      for (const ms of milestones) {
+        this._updateStateBadge(container, ms.key, this.computedStates[ms.key], 0);
+      }
+      return;
+    }
+
     // Collect children keys per milestone
     const msToChildren = {};
     const allChildKeys = new Set();
@@ -1206,6 +1216,16 @@ class App {
    */
   async _loadThemeStates(themes, container) {
     if (themes.length === 0) return;
+
+    // Check if all themes are already cached
+    const uncachedThemes = themes.filter(t => this.computedStates[t.key] === undefined);
+    if (uncachedThemes.length === 0) {
+      // All cached — just render badges
+      for (const theme of themes) {
+        this._updateStateBadge(container, theme.key, this.computedStates[theme.key], 0);
+      }
+      return;
+    }
 
     // Collect milestone keys per theme
     const themeToMsKeys = {};
