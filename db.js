@@ -259,9 +259,6 @@ async function createStore(config) {
     idleTimeoutMillis: 30000
   });
 
-  const { runMigrations } = require('./migrations/migrate-lib');
-  await runMigrations(pool);
-
   console.log('[DB] Connected to PostgreSQL');
   return createDbStore(pool);
 }

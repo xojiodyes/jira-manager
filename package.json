@@ -6,8 +6,7 @@
   "scripts": {
     "start": "MODE=real node server.js",
     "mock": "MODE=mock node server.js",
-    "dev": "MODE=mock node --watch server.js",
-    "migrate": "node migrations/migrate.js"
+    "dev": "MODE=mock node --watch server.js"
   },
   "keywords": [
     "jira",
