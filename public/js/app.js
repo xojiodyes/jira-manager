@@ -12,6 +12,7 @@ class App {
     this.selectedMilestoneProject = null;
     this.selectedEpicKey = null;
     this.selectedEpicProject = null;
+    this.focusedPanel = 'theme'; // 'theme' | 'milestone' — default: themes detailed
 
     // Local data (status, confidence per issue key)
     this.localData = {};
@@ -1031,7 +1032,7 @@ class App {
     if (stateEl) {
       // For hierarchy-row, stateEl is a span wrapping a badge
       if (stateEl.classList.contains('hierarchy-state')) {
-        stateEl.innerHTML = `<span class="progress-badge progress-${rounded}">${avg}%</span>`;
+        stateEl.innerHTML = rounded ? `<span class="progress-badge progress-${rounded}">${avg}%</span>` : '';
       } else {
         // For table cells, stateEl IS the badge
         stateEl.className = `progress-badge progress-${rounded}`;
@@ -1272,17 +1273,18 @@ class App {
       return;
     }
 
-    let html = `<div class="hierarchy-list" data-panel="${level}">
+    const isSimplified = this.focusedPanel && this.focusedPanel !== level;
+    let html = `<div class="hierarchy-list${isSimplified ? ' simplified' : ''}" data-panel="${level}">
       <div class="hierarchy-list-header">
         <span class="hlh-detail"></span>
+        <span class="hlh-state">State</span>
         <span class="hlh-key">Key</span>
         <span class="hlh-summary">Summary</span>
-        <span class="hlh-count">Items</span>
+        <span class="hlh-count hlh-items">Items</span>
         <span class="hlh-count hlh-devqa">#D/Q</span>
         <span class="hlh-count hlh-sp">SP</span>
-        <span class="hlh-edit">S%</span>
-        <span class="hlh-edit">C%</span>
-        <span class="hlh-state">State</span>
+        <span class="hlh-edit hlh-status">S%</span>
+        <span class="hlh-edit hlh-confidence">C%</span>
         <span class="hlh-sparkline">Trend</span>
         <span class="hlh-git">Git</span>
       </div>`;
@@ -1301,6 +1303,7 @@ class App {
         <div class="hierarchy-row" data-key="${issue.key}" data-level="${level}">
           <div class="hierarchy-row-main">
             <span class="hierarchy-detail-btn" data-key="${issue.key}" title="View details">👁</span>
+            <span class="hierarchy-state" data-state-key="${issue.key}">${App.statusToProgress(f.status?.name) ? `<span class="progress-badge progress-${App.statusToProgress(f.status?.name)}">${App.statusToProgress(f.status?.name)}%</span>` : ''}</span>
             <a href="${jiraAPI.getIssueUrl(issue.key)}" target="_blank" class="issue-key" onclick="event.stopPropagation()" title="Open in Jira">${issue.key}</a>
             <span class="hierarchy-summary">${UI.escapeHtml(f.summary)}</span>
             <span class="hierarchy-items-count" title="Child items">${childCount}</span>
@@ -1308,7 +1311,6 @@ class App {
             <span class="hierarchy-sp-count">${f.story_points ?? f.customfield_10002 ?? ''}</span>
             <span class="hierarchy-edit editable-field editable-status" data-key="${issue.key}" data-field="status">${this.getLocalField(issue.key, 'status') !== null ? this.getLocalField(issue.key, 'status') + '%' : '—'}</span>
             <span class="hierarchy-edit editable-field editable-confidence" data-key="${issue.key}" data-field="confidence">${this.getLocalField(issue.key, 'confidence') !== null ? this.getLocalField(issue.key, 'confidence') + '%' : '—'}</span>
-            <span class="hierarchy-state" data-state-key="${issue.key}"><span class="progress-badge progress-${App.statusToProgress(f.status?.name)}">${App.statusToProgress(f.status?.name)}%</span></span>
             <span class="hierarchy-sparkline">${UI.renderSparkline(this.progressHistory[issue.key] || [], issue.key)}</span>
             <span class="hierarchy-git-dot">${UI.renderGitDot(this.gitActivity[issue.key], issue.key)}</span>
           </div>
@@ -1364,6 +1366,7 @@ class App {
   // === TABLE MODE (detailed / simplified) ===
 
   updateTableModes(focusedPanel) {
+    this.focusedPanel = focusedPanel;
     document.querySelectorAll('.hierarchy-list[data-panel="theme"]').forEach(el => {
       el.classList.toggle('simplified', focusedPanel !== 'theme');
     });
@@ -1980,6 +1983,9 @@ class App {
     const key = rows[0].dataset.key;
     if (!key) return;
 
+    // Preserve focused panel during cascade — don't let child selection switch table modes
+    const savedFocus = this.focusedPanel;
+
     if (panel === 'milestones') {
       await this.selectMilestone(key);
       // Continue cascade into tasks
@@ -1991,6 +1997,9 @@ class App {
         await this.selectEpic(key);
       }
     }
+
+    // Restore focused panel after cascade
+    if (savedFocus) this.updateTableModes(savedFocus);
   }
 
   // === INLINE EDITING ===

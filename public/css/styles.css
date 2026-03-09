@@ -1137,13 +1137,18 @@ a:hover {
   text-align: center;
 }
 
-/* Simplified mode — hide #D/Q, SP, Trend, Git */
+/* Simplified mode — hide Items, #D/Q, SP, S%, C%, Trend, Git */
+.hierarchy-list.simplified .hlh-items,
 .hierarchy-list.simplified .hlh-devqa,
 .hierarchy-list.simplified .hlh-sp,
+.hierarchy-list.simplified .hlh-status,
+.hierarchy-list.simplified .hlh-confidence,
 .hierarchy-list.simplified .hlh-sparkline,
 .hierarchy-list.simplified .hlh-git,
+.hierarchy-list.simplified .hierarchy-items-count,
 .hierarchy-list.simplified .hierarchy-devqa-count,
 .hierarchy-list.simplified .hierarchy-sp-count,
+.hierarchy-list.simplified .hierarchy-edit,
 .hierarchy-list.simplified .hierarchy-sparkline,
 .hierarchy-list.simplified .hierarchy-git-dot {
   display: none;

@@ -259,25 +259,6 @@ function detectProblems(issue, level) {
   return problems;
 }
 
-const STATUS_PROGRESS_MAP = {
-  'open': 0, 'to do': 0, 'backlog': 0, 'new': 0, 'reopened': 0,
-  'in development': 20, 'in progress': 20, 'dev': 20, 'in review': 20, 'review': 20, 'code review': 20,
-  'qa': 40, 'in qa': 40, 'in testing': 40, 'testing': 40, 'ready for qa': 40,
-  'uat': 60, 'in uat': 60, 'user acceptance': 60, 'ready for uat': 60,
-  'uat done': 80, 'ready for prod': 80, 'ready for release': 80, 'ready for deploy': 80,
-  'resolved': 100, 'closed': 100, 'done': 100, 'released': 100
-};
-
-function statusToProgress(statusName) {
-  if (!statusName) return 0;
-  const name = statusName.toLowerCase().trim();
-  if (STATUS_PROGRESS_MAP.hasOwnProperty(name)) return STATUS_PROGRESS_MAP[name];
-  for (const [key, val] of Object.entries(STATUS_PROGRESS_MAP)) {
-    if (name.includes(key) || key.includes(name)) return val;
-  }
-  return 0;
-}
-
 function issueToDebugNode(issue, level) {
   const f = issue.fields || {};
   const ownState = statusToProgress(f.status?.name);
