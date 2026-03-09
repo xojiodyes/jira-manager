@@ -1285,6 +1285,7 @@ class App {
         <span class="hlh-count hlh-sp">SP</span>
         <span class="hlh-edit hlh-status">S%</span>
         <span class="hlh-edit hlh-confidence">C%</span>
+        <span class="hlh-ddate">D Date</span>
         <span class="hlh-sparkline">Trend</span>
         <span class="hlh-git">Git</span>
       </div>`;
@@ -1299,6 +1300,18 @@ class App {
         return true;
       }).length;
 
+      // D Date: due date / target date
+      const dueDate = f.duedate || null;
+      const targetDate = f.customfield_18801 || null;
+      let ddateText = '';
+      if (dueDate && targetDate) {
+        ddateText = this._fmtShortDate(dueDate) + ' / ' + this._fmtShortDate(targetDate);
+      } else if (dueDate) {
+        ddateText = this._fmtShortDate(dueDate);
+      } else if (targetDate) {
+        ddateText = this._fmtShortDate(targetDate);
+      }
+
       html += `
         <div class="hierarchy-row" data-key="${issue.key}" data-level="${level}">
           <div class="hierarchy-row-main">
@@ -1311,6 +1324,7 @@ class App {
             <span class="hierarchy-sp-count">${f.story_points ?? f.customfield_10002 ?? ''}</span>
             <span class="hierarchy-edit editable-field editable-status" data-key="${issue.key}" data-field="status">${this.getLocalField(issue.key, 'status') !== null ? this.getLocalField(issue.key, 'status') + '%' : '—'}</span>
             <span class="hierarchy-edit editable-field editable-confidence" data-key="${issue.key}" data-field="confidence">${this.getLocalField(issue.key, 'confidence') !== null ? this.getLocalField(issue.key, 'confidence') + '%' : '—'}</span>
+            <span class="hierarchy-ddate" title="${dueDate && targetDate ? 'Due / Target' : dueDate ? 'Due date' : targetDate ? 'Target date' : ''}">${ddateText}</span>
             <span class="hierarchy-sparkline">${UI.renderSparkline(this.progressHistory[issue.key] || [], issue.key)}</span>
             <span class="hierarchy-git-dot">${UI.renderGitDot(this.gitActivity[issue.key], issue.key)}</span>
           </div>
@@ -1834,6 +1848,14 @@ class App {
     }
     return 0;
   }
+
+  /** Format "YYYY-MM-DD" → "DD Mon" (e.g. "15 Mar") */
+  _fmtShortDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+  }
+
   static PANEL_CONFIG = {
     themes:     { containerId: 'themesContainer',         rowSelector: '.hierarchy-row' },
     milestones: { containerId: 'milestonesContainer',     rowSelector: '.hierarchy-row' },
