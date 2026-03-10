@@ -1816,11 +1816,14 @@ class App {
       const key = issue.key;
       const summary = UI.escapeHtml(f.summary || '');
       const desc = f.description ? UI.escapeHtml(f.description.substring(0, 120)) : '';
+      const pct = App.statusToProgress(f.status?.name);
+      const stateBadge = pct ? `<span class="progress-badge progress-${pct}" style="font-size:10px;padding:1px 5px">${pct}%</span>` : '';
 
       html += `
         <div class="link-issue-row" data-key="${key}">
           <div class="link-issue-info">
             <div class="link-issue-top">
+              ${stateBadge}
               <span class="link-issue-key">${key}</span>
               <span class="link-issue-summary">${summary}</span>
             </div>
