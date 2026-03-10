@@ -83,7 +83,7 @@ function createDbStore(pool) {
 
     async getProgressData() {
       const snapRes = await pool.query(`
-        SELECT snapshot_date, issue_key, progress
+        SELECT snapshot_date, issue_key, progress, child_count
         FROM ${S}.progress_snapshots
         WHERE snapshot_date >= NOW() - INTERVAL '60 days'
         ORDER BY snapshot_date
@@ -94,7 +94,9 @@ function createDbStore(pool) {
           ? row.snapshot_date.toISOString().slice(0, 10)
           : String(row.snapshot_date).slice(0, 10);
         if (!snapshots[dateStr]) snapshots[dateStr] = {};
-        snapshots[dateStr][row.issue_key] = { progress: row.progress };
+        const entry = { progress: row.progress };
+        if (row.child_count != null) entry.childCount = row.child_count;
+        snapshots[dateStr][row.issue_key] = entry;
       }
 
       const gitRes = await pool.query(`SELECT * FROM ${S}.git_activity`);
@@ -125,7 +127,7 @@ function createDbStore(pool) {
       return { snapshots, gitActivity, developers, lastRun };
     },
 
-    async saveSnapshotData({ dailyResults, gitResults, devResults, days, mode }) {
+    async saveSnapshotData({ dailyResults, gitResults, devResults, scopeResults, days, mode }) {
       const doTrend = mode === 'all' || mode === 'trend';
       const doGit = mode === 'all' || mode === 'git';
 
@@ -133,24 +135,36 @@ function createDbStore(pool) {
       try {
         await client.query('BEGIN');
 
+        // Ensure child_count column exists (safe migration)
+        await client.query(`
+          DO $$ BEGIN
+            ALTER TABLE ${S}.progress_snapshots ADD COLUMN child_count SMALLINT;
+          EXCEPTION WHEN duplicate_column THEN NULL;
+          END $$;
+        `);
+
         if (doTrend) {
-          const dates = [], keys = [], progresses = [];
+          const dates = [], keys = [], progresses = [], childCounts = [];
           for (const day of days) {
             for (const [key, dailyMap] of Object.entries(dailyResults)) {
               if (dailyMap[day] !== undefined) {
                 dates.push(day);
                 keys.push(key);
                 progresses.push(Math.round(dailyMap[day]));
+                // child_count from daily scope map (reconstructed from changelog)
+                childCounts.push(scopeResults?.[key]?.[day] ?? null);
               }
             }
           }
 
           if (dates.length > 0) {
             await client.query(`
-              INSERT INTO ${S}.progress_snapshots (snapshot_date, issue_key, progress)
-              SELECT * FROM UNNEST($1::date[], $2::varchar[], $3::smallint[])
-              ON CONFLICT (snapshot_date, issue_key) DO UPDATE SET progress = EXCLUDED.progress
-            `, [dates, keys, progresses]);
+              INSERT INTO ${S}.progress_snapshots (snapshot_date, issue_key, progress, child_count)
+              SELECT d, k, p, c FROM UNNEST($1::date[], $2::varchar[], $3::smallint[], $4::smallint[]) AS t(d, k, p, c)
+              ON CONFLICT (snapshot_date, issue_key) DO UPDATE
+                SET progress = EXCLUDED.progress,
+                    child_count = COALESCE(EXCLUDED.child_count, ${S}.progress_snapshots.child_count)
+            `, [dates, keys, progresses, childCounts]);
           }
 
           await client.query(`DELETE FROM ${S}.issue_developers`);
@@ -219,7 +233,7 @@ function createMemoryStore() {
       return issueKey ? history.filter(h => h.issueKey === issueKey) : history;
     },
     async getProgressData() { return progressData; },
-    async saveSnapshotData({ dailyResults, gitResults, devResults, days, mode }) {
+    async saveSnapshotData({ dailyResults, gitResults, devResults, scopeResults, days, mode }) {
       const doTrend = mode === 'all' || mode === 'trend';
       const doGit = mode === 'all' || mode === 'git';
       if (doTrend) {
@@ -227,7 +241,10 @@ function createMemoryStore() {
           if (!progressData.snapshots[day]) progressData.snapshots[day] = {};
           for (const [key, dailyMap] of Object.entries(dailyResults)) {
             if (dailyMap[day] !== undefined) {
-              progressData.snapshots[day][key] = { progress: dailyMap[day] };
+              const entry = { progress: dailyMap[day] };
+              const scopeVal = scopeResults?.[key]?.[day];
+              if (scopeVal != null) entry.childCount = scopeVal;
+              progressData.snapshots[day][key] = entry;
             }
           }
         }

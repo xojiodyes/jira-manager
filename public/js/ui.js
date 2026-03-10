@@ -420,6 +420,20 @@ const UI = {
         <span class="git-popup-value">${this._fmtShortDate(first.date)} — ${this._fmtShortDate(last.date)}</span>
       </div>`;
 
+      // Scope (child count) change
+      const scopePoints = dataPoints.filter(p => p.childCount != null);
+      if (scopePoints.length > 0) {
+        const firstScope = scopePoints[0].childCount;
+        const lastScope = scopePoints[scopePoints.length - 1].childCount;
+        const scopeDelta = lastScope - firstScope;
+        const scopeSign = scopeDelta > 0 ? '+' : '';
+        const scopeColor = scopeDelta > 0 ? '#ff5630' : scopeDelta < 0 ? '#36b37e' : '#97a0af';
+        html += `<div class="git-popup-row">
+          <span class="git-popup-label">Scope</span>
+          <span class="git-popup-value" style="font-weight:600">${lastScope} items${scopeDelta !== 0 ? ` <span style="color:${scopeColor};font-size:11px">${scopeSign}${scopeDelta}</span>` : ''}</span>
+        </div>`;
+      }
+
       // Larger sparkline
       html += '<div class="trend-popup-chart">';
       html += this._renderLargeSparkline(dataPoints, 230, 60);
@@ -434,9 +448,10 @@ const UI = {
           const wDelta = w.end - w.start;
           const wSign = wDelta > 0 ? '+' : '';
           const wColor = wDelta > 0 ? '#36b37e' : wDelta < 0 ? '#ff5630' : '#97a0af';
+          const scopeLabel = w.scope != null ? ` <span style="color:#6b778c;font-size:10px">(${w.scope})</span>` : '';
           html += `<div class="git-popup-row">
             <span class="git-popup-label">${w.label}</span>
-            <span class="git-popup-value">${w.avg}% <span style="color:${wColor};font-size:11px">${wSign}${wDelta}</span></span>
+            <span class="git-popup-value">${w.avg}% <span style="color:${wColor};font-size:11px">${wSign}${wDelta}</span>${scopeLabel}</span>
           </div>`;
         }
       }
@@ -568,16 +583,20 @@ const UI = {
       const monday = new Date(d);
       monday.setDate(diff);
       const weekKey = monday.toISOString().slice(0, 10);
-      if (!weeks[weekKey]) weeks[weekKey] = [];
-      weeks[weekKey].push(dp.progress);
+      if (!weeks[weekKey]) weeks[weekKey] = { progress: [], scopes: [] };
+      weeks[weekKey].progress.push(dp.progress);
+      if (dp.childCount != null) weeks[weekKey].scopes.push(dp.childCount);
     }
     const result = [];
     for (const wk of Object.keys(weeks).sort()) {
-      const vals = weeks[wk];
+      const vals = weeks[wk].progress;
+      const scopes = weeks[wk].scopes;
       const avg = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
       const d = new Date(wk + 'T00:00:00');
       const label = d.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
-      result.push({ label, avg, start: vals[0], end: vals[vals.length - 1] });
+      const entry = { label, avg, start: vals[0], end: vals[vals.length - 1] };
+      if (scopes.length > 0) entry.scope = scopes[scopes.length - 1];
+      result.push(entry);
     }
     return result;
   },

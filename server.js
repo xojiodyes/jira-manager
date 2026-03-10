@@ -870,6 +870,74 @@ function averageDailyProgress(childrenDailyMaps, days) {
   return result;
 }
 
+/**
+ * Build daily child count (scope) from issue changelog.
+ * Reconstructs how many linked children existed on each day.
+ *
+ * @param {object} issue - Jira issue with expanded changelog
+ * @param {number} currentChildCount - current number of children (already filtered)
+ * @param {string[]} days - array of "YYYY-MM-DD" strings (60 days)
+ * @returns {object} { "YYYY-MM-DD": count, ... }
+ */
+function buildDailyScope(issue, currentChildCount, days) {
+  const createdDate = (issue.fields?.created || '').slice(0, 10);
+
+  // Extract link changes from changelog
+  // +1 = link added, -1 = link removed
+  const linkChanges = [];
+  const changelog = issue.changelog;
+  if (changelog && changelog.histories) {
+    for (const history of changelog.histories) {
+      const date = (history.created || '').slice(0, 10);
+      for (const item of (history.items || [])) {
+        if (item.field === 'Link' || item.field === 'Epic Link' || item.field === 'Parent') {
+          if (item.toString && !item.fromString) {
+            // Link created
+            linkChanges.push({ date, delta: +1 });
+          } else if (item.fromString && !item.toString) {
+            // Link removed
+            linkChanges.push({ date, delta: -1 });
+          }
+        }
+      }
+    }
+  }
+
+  // Sort ascending by date
+  linkChanges.sort((a, b) => a.date.localeCompare(b.date));
+
+  // Compute net delta within the window to find starting count
+  // current = starting + netDelta => starting = current - netDelta
+  const firstDay = days[0];
+  const netDeltaInWindow = linkChanges
+    .filter(c => c.date >= firstDay)
+    .reduce((sum, c) => sum + c.delta, 0);
+  const startingCount = Math.max(0, currentChildCount - netDeltaInWindow);
+
+  // Walk forward through days, applying link changes
+  const result = {};
+  let running = startingCount;
+  let changeIdx = 0;
+
+  // Skip changes before our window
+  while (changeIdx < linkChanges.length && linkChanges[changeIdx].date < firstDay) {
+    changeIdx++;
+  }
+
+  for (const day of days) {
+    while (changeIdx < linkChanges.length && linkChanges[changeIdx].date <= day) {
+      running += linkChanges[changeIdx].delta;
+      if (running < 0) running = 0;
+      changeIdx++;
+    }
+    if (day >= createdDate) {
+      result[day] = running;
+    }
+  }
+
+  return result;
+}
+
 // Snapshot state for SSE progress reporting
 let snapshotState = { running: false, phase: '', current: 0, total: 0, message: '', done: false, totalIssues: 0, error: null };
 const sseClients = [];
@@ -895,6 +963,8 @@ async function computeSnapshot(baseJql, mode = 'all') {
   const gitResults = {};
   // devResults[issueKey] = [{ displayName, avatarUrl }]
   const devResults = {};
+  // scopeResults[issueKey] = { "YYYY-MM-DD": childCount, ... } — daily scope from changelog
+  const scopeResults = {};
 
   try {
     snapshotState.phase = 'themes';
@@ -914,7 +984,7 @@ async function computeSnapshot(baseJql, mode = 'all') {
       snapshotState.message = `Theme ${theme.key} (${ti + 1}/${themes.length})`;
       broadcastSSE(snapshotState);
 
-      const themeIssue = await jiraGetIssue(theme.key);
+      const themeIssue = await jiraGetIssue(theme.key, doTrend); // with changelog for scope
       const milestoneLinkedKeys = extractLinkedKeys(themeIssue);
       const milestoneDailyMaps = [];
       const milestoneGitData = [];
@@ -928,7 +998,7 @@ async function computeSnapshot(baseJql, mode = 'all') {
           snapshotState.message = `${theme.key} → ${milestone.key}`;
           broadcastSSE(snapshotState);
 
-          const msIssue = await jiraGetIssue(milestone.key);
+          const msIssue = await jiraGetIssue(milestone.key, doTrend); // with changelog for scope
           const epicLinkedKeys = extractLinkedKeys(msIssue);
           const epicDailyMaps = [];
           const epicGitData = [];
@@ -966,6 +1036,10 @@ async function computeSnapshot(baseJql, mode = 'all') {
               }
 
               const children = [...childMap.values()];
+              // Build daily scope from changelog for this epic
+              if (doTrend && children.length > 0) {
+                scopeResults[epic.key] = buildDailyScope(epicIssue, children.length, days);
+              }
               {
                 const childDailyMaps = [];
 
@@ -1054,6 +1128,10 @@ async function computeSnapshot(baseJql, mode = 'all') {
               }
               snapshotState.totalIssues++;
             }
+            // Build daily scope from changelog for this milestone
+            if (doTrend && epics.length > 0) {
+              scopeResults[milestone.key] = buildDailyScope(msIssue, epics.length, days);
+            }
           }
 
           if (doTrend) {
@@ -1080,6 +1158,10 @@ async function computeSnapshot(baseJql, mode = 'all') {
 
           snapshotState.totalIssues++;
         }
+        // Build daily scope from changelog for this theme
+        if (doTrend && milestones.length > 0) {
+          scopeResults[theme.key] = buildDailyScope(themeIssue, milestones.length, days);
+        }
       }
 
       if (doTrend) {
@@ -1104,7 +1186,7 @@ async function computeSnapshot(baseJql, mode = 'all') {
     }
 
     // Save all computed data via store
-    await store.saveSnapshotData({ dailyResults, gitResults, devResults, days, mode });
+    await store.saveSnapshotData({ dailyResults, gitResults, devResults, scopeResults, days, mode });
 
     snapshotState.phase = 'done';
     snapshotState.message = `Done. ${snapshotState.totalIssues} issues processed.`;

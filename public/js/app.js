@@ -91,7 +91,9 @@ class App {
       const issues = snapshots[date];
       for (const [key, val] of Object.entries(issues)) {
         if (!progressResult[key]) progressResult[key] = [];
-        progressResult[key].push({ date, progress: val.progress });
+        const point = { date, progress: val.progress };
+        if (val.childCount != null) point.childCount = val.childCount;
+        progressResult[key].push(point);
       }
     }
     return progressResult;
