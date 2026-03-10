@@ -1697,7 +1697,7 @@ const server = http.createServer((req, res) => {
         // Data rows
         for (const issue of issues) {
           ws.addRow({
-            status: issue.status || '',
+            status: issue.status != null ? `${issue.status}%` : '',
             summary: issue.summary || '',
             key: issue.key || '',
             comments: '',

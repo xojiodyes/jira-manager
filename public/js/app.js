@@ -203,7 +203,7 @@ class App {
       const issues = this.currentTaskIssues.map(issue => ({
         key: issue.key,
         summary: issue.fields?.summary || '',
-        status: issue.fields?.status?.name || '',
+        status: App.statusToProgress(issue.fields?.status?.name),
       }));
 
       const res = await fetch('/api/export/tasks', {
