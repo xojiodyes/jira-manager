@@ -1669,6 +1669,61 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Export Epics/Stories to xlsx (Status, Description, Key, Comments)
+  if (pathname === '/api/export/tasks' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const { issues } = JSON.parse(body);
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Tasks');
+
+        // Columns
+        ws.columns = [
+          { header: 'Status', key: 'status', width: 18 },
+          { header: 'Summary', key: 'summary', width: 60 },
+          { header: 'Key', key: 'key', width: 16 },
+          { header: 'Comments', key: 'comments', width: 40 },
+        ];
+
+        // Header style
+        ws.getRow(1).eachCell(cell => {
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF333333' } };
+          cell.alignment = { vertical: 'middle' };
+        });
+
+        // Data rows
+        for (const issue of issues) {
+          ws.addRow({
+            status: issue.status || '',
+            summary: issue.summary || '',
+            key: issue.key || '',
+            comments: '',
+          });
+        }
+
+        // Auto-filter
+        ws.autoFilter = { from: 'A1', to: 'D1' };
+
+        const buffer = await wb.xlsx.writeBuffer();
+        const filename = `tasks-${new Date().toISOString().slice(0, 10)}.xlsx`;
+        res.writeHead(200, {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Content-Length': buffer.length
+        });
+        res.end(Buffer.from(buffer));
+      } catch (err) {
+        console.error('Tasks export error:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
   // Debug hierarchy
   if (pathname === '/api/debug/hierarchy' && req.method === 'GET') {
     const baseJql = parsedUrl.query?.jql || '';

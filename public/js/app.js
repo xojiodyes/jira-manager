@@ -189,6 +189,53 @@ class App {
     }
   }
 
+  async exportTasks() {
+    if (!this.currentTaskIssues || this.currentTaskIssues.length === 0) {
+      UI.toast('No tasks to export', 'error');
+      return;
+    }
+
+    const btn = document.getElementById('exportTasksBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳';
+
+    try {
+      const issues = this.currentTaskIssues.map(issue => ({
+        key: issue.key,
+        summary: issue.fields?.summary || '',
+        status: issue.fields?.status?.name || '',
+      }));
+
+      const res = await fetch('/api/export/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issues }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Export failed');
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tasks-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      UI.toast('Tasks exported', 'success');
+    } catch (err) {
+      UI.toast(`Export error: ${err.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '📥';
+    }
+  }
+
   async saveLocalField(issueKey, field, value) {
     try {
       const res = await fetch('/api/data', {
@@ -377,6 +424,11 @@ class App {
       this.exportRoadmap();
     });
 
+    // Export tasks button
+    document.getElementById('exportTasksBtn').addEventListener('click', () => {
+      this.exportTasks();
+    });
+
     // Snapshot buttons
     document.getElementById('snapshotTrendBtn').addEventListener('click', () => {
       this.startSnapshot('trend');
@@ -441,6 +493,23 @@ class App {
     document.getElementById('addTaskBtn').addEventListener('click', () => {
       this.showInlineForm('tasks');
     });
+    document.getElementById('linkIssueBtn').addEventListener('click', () => {
+      this.openLinkIssueModal();
+    });
+    document.getElementById('closeLinkIssueModal').addEventListener('click', () => {
+      UI.closeModal('linkIssueModal');
+      this._onLinkIssueModalClose();
+    });
+    document.getElementById('linkIssueFilterInput').addEventListener('input', (e) => {
+      this._filterLinkIssueList(e.target.value);
+    });
+    // Delegate click on link buttons inside the modal
+    document.getElementById('linkIssueList').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-link-key]');
+      if (btn && !btn.disabled) {
+        this.linkExistingIssue(btn.dataset.linkKey);
+      }
+    });
     document.getElementById('addEpicTaskBtn').addEventListener('click', () => {
       this.showInlineForm('epicTasks');
     });
@@ -448,7 +517,11 @@ class App {
     // Modal backdrop click
     document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
       backdrop.addEventListener('click', (e) => {
-        e.target.closest('.modal').classList.remove('active');
+        const modal = e.target.closest('.modal');
+        modal.classList.remove('active');
+        if (modal.id === 'linkIssueModal') {
+          this._onLinkIssueModalClose();
+        }
       });
     });
 
@@ -792,6 +865,7 @@ class App {
     this.selectedMilestoneProject = null;
     document.getElementById('addMilestoneBtn').disabled = true;
     document.getElementById('addTaskBtn').disabled = true;
+    document.getElementById('linkIssueBtn').disabled = true;
     document.getElementById('addEpicTaskBtn').disabled = true;
     document.getElementById('milestonesContainer').innerHTML = UI.renderEmpty('🎯', 'Select a Theme');
     document.getElementById('milestonesCount').textContent = '';
@@ -861,6 +935,7 @@ class App {
     // Enable milestone button, disable task button
     document.getElementById('addMilestoneBtn').disabled = false;
     document.getElementById('addTaskBtn').disabled = true;
+    document.getElementById('linkIssueBtn').disabled = true;
     document.getElementById('addEpicTaskBtn').disabled = true;
 
     // Reset tasks panel
@@ -942,8 +1017,9 @@ class App {
       row.classList.toggle('selected', row.dataset.key === issueKey);
     });
 
-    // Enable task button
+    // Enable task button + link button
     document.getElementById('addTaskBtn').disabled = false;
+    document.getElementById('linkIssueBtn').disabled = false;
     document.getElementById('addEpicTaskBtn').disabled = true;
     this.resetEpicTasksPanel();
 
@@ -981,6 +1057,8 @@ class App {
       const data = await jiraAPI.searchIssues(jql, 0, 200);
       tasksContainer.classList.remove('loading-overlay');
       tasksCount.textContent = data.total > 0 ? data.total : '';
+      this.currentTaskIssues = data.issues || [];
+      document.getElementById('exportTasksBtn').style.display = this.currentTaskIssues.length > 0 ? '' : 'none';
       this.renderHierarchyTasks(tasksContainer, data.issues);
 
       // Async: fetch Epic Link child counts for epics and update badges
@@ -1690,6 +1768,128 @@ class App {
 
     // Reload epic tasks
     await this.selectEpic(this.selectedEpicKey);
+  }
+
+  // ============================================================
+  // LINK EXISTING ISSUE
+  // ============================================================
+
+  async openLinkIssueModal() {
+    if (!this.selectedMilestoneKey || !this.selectedMilestoneProject) {
+      UI.toast('Select a Milestone first', 'error');
+      return;
+    }
+
+    const titleEl = document.getElementById('linkIssueModalTitle');
+    titleEl.textContent = `Link issue to ${this.selectedMilestoneKey}`;
+
+    const listEl = document.getElementById('linkIssueList');
+    listEl.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+    const filterInput = document.getElementById('linkIssueFilterInput');
+    filterInput.value = '';
+
+    UI.openModal('linkIssueModal');
+
+    try {
+      const project = this.selectedMilestoneProject;
+      const jql = `project = ${project} AND created >= -45d ORDER BY created DESC`;
+      const data = await jiraAPI.searchIssues(jql, 0, 200);
+      this._linkIssueItems = data.issues || [];
+      this._renderLinkIssueList(this._linkIssueItems);
+    } catch (err) {
+      listEl.innerHTML = `<div class="link-issue-empty">Error: ${err.message}</div>`;
+    }
+  }
+
+  _renderLinkIssueList(issues) {
+    const listEl = document.getElementById('linkIssueList');
+
+    if (issues.length === 0) {
+      listEl.innerHTML = '<div class="link-issue-empty">No issues found</div>';
+      return;
+    }
+
+    let html = '';
+    for (const issue of issues) {
+      const f = issue.fields;
+      const key = issue.key;
+      const summary = UI.escapeHtml(f.summary || '');
+      const desc = f.description ? UI.escapeHtml(f.description.substring(0, 120)) : '';
+
+      html += `
+        <div class="link-issue-row" data-key="${key}">
+          <div class="link-issue-info">
+            <div class="link-issue-top">
+              <span class="link-issue-key">${key}</span>
+              <span class="link-issue-summary">${summary}</span>
+            </div>
+            ${desc ? `<div class="link-issue-desc">${desc}</div>` : ''}
+          </div>
+          <div class="link-issue-action">
+            <button class="link-issue-btn" data-link-key="${key}">Link</button>
+          </div>
+        </div>`;
+    }
+
+    listEl.innerHTML = html;
+  }
+
+  _filterLinkIssueList(query) {
+    if (!this._linkIssueItems) return;
+    const q = query.toLowerCase().trim();
+    if (!q) {
+      this._renderLinkIssueList(this._linkIssueItems);
+      return;
+    }
+    const filtered = this._linkIssueItems.filter(issue => {
+      const key = issue.key.toLowerCase();
+      const summary = (issue.fields.summary || '').toLowerCase();
+      return key.includes(q) || summary.includes(q);
+    });
+    this._renderLinkIssueList(filtered);
+  }
+
+  async linkExistingIssue(issueKey) {
+    try {
+      // Disable the button while linking
+      const btn = document.querySelector(`[data-link-key="${issueKey}"]`);
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '...';
+      }
+
+      await jiraAPI.createIssueLink(issueKey, this.selectedMilestoneKey, this.getSelectedLinkType());
+
+      // Remove the row visually
+      const row = document.querySelector(`.link-issue-row[data-key="${issueKey}"]`);
+      if (row) {
+        row.style.opacity = '0.3';
+        row.style.pointerEvents = 'none';
+      }
+
+      // Remove from cached list
+      if (this._linkIssueItems) {
+        this._linkIssueItems = this._linkIssueItems.filter(i => i.key !== issueKey);
+      }
+
+      UI.toast(`${issueKey} linked`, 'success');
+    } catch (err) {
+      UI.toast(`Failed to link ${issueKey}: ${err.message}`, 'error');
+      // Re-enable button
+      const btn = document.querySelector(`[data-link-key="${issueKey}"]`);
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Link';
+      }
+    }
+  }
+
+  _onLinkIssueModalClose() {
+    // Refresh tasks when modal is closed (if a milestone is selected)
+    if (this.selectedMilestoneKey) {
+      this.selectMilestone(this.selectedMilestoneKey);
+    }
   }
 
   /**

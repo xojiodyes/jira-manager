@@ -83,6 +83,8 @@
                 <h3>Epics/Stories</h3>
                 <div class="card-header-right">
                   <span class="results-count" id="hierarchyTasksCount"></span>
+                  <button class="btn-icon" id="exportTasksBtn" title="Export to Excel" style="display:none;">📥</button>
+                  <button class="btn-icon" id="linkIssueBtn" title="Link existing issue" disabled>🔗</button>
                   <button class="btn-icon" id="addTaskBtn" title="Add Task" disabled>+</button>
                 </div>
               </div>
@@ -166,6 +168,25 @@
           </div>
         </div>
       </div>
+      <!-- Link Issue Modal -->
+      <div class="modal" id="linkIssueModal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-lg">
+          <div class="modal-header">
+            <h3 id="linkIssueModalTitle">Link issue to milestone</h3>
+            <button class="modal-close" id="closeLinkIssueModal">✕</button>
+          </div>
+          <div class="modal-body" style="padding: 0;">
+            <div class="link-issue-filter">
+              <input type="text" id="linkIssueFilterInput" class="input input-sm" placeholder="Filter by key or summary...">
+            </div>
+            <div class="link-issue-list" id="linkIssueList">
+              <div class="loading"><div class="spinner"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Debug/Diagnostics Modal -->
       <div class="modal" id="debugModal">
         <div class="modal-backdrop"></div>
