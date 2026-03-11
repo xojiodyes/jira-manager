@@ -540,30 +540,22 @@ class App {
       });
     });
 
-    // Scope sparkline popup on hover over Items count
-    let scopePopupTimer = null;
-    document.addEventListener('mouseover', (e) => {
+    // Scope sparkline popup on click on Items count
+    document.addEventListener('click', (e) => {
       const el = e.target.closest('.scope-hoverable');
       if (!el) return;
       const key = el.dataset.key;
       if (!key) return;
       const pts = (this.progressHistory[key] || []).filter(p => p.childCount != null);
       if (pts.length < 2) return;
-
-      clearTimeout(scopePopupTimer);
-      scopePopupTimer = setTimeout(() => {
-        UI.showScopePopup(el, pts);
-      }, 300);
-    });
-    document.addEventListener('mouseout', (e) => {
-      const el = e.target.closest('.scope-hoverable');
-      if (el) {
-        clearTimeout(scopePopupTimer);
-        setTimeout(() => {
-          const popup = document.querySelector('.scope-popup');
-          if (!popup || !popup._keepAlive) UI.hideScopePopup();
-        }, 200);
+      e.stopPropagation();
+      // Toggle: close if already open for same key
+      const existing = document.querySelector('.scope-popup');
+      if (existing && existing._scopeKey === key) {
+        UI.hideScopePopup();
+        return;
       }
+      UI.showScopePopup(el, pts, key);
     });
 
     // ESC to close modals / popups
@@ -1512,6 +1504,24 @@ class App {
           this.selectMilestone(key);
         }
       });
+
+      // Double-click: select + focus child panel (detailed mode + scroll)
+      row.addEventListener('dblclick', (e) => {
+        // Ignore interactive elements
+        if (e.target.closest('.sparkline-clickable, .editable-field, .hierarchy-detail-btn, .devqa-clickable, .issue-key')) return;
+        const key = row.dataset.key;
+        if (level === 'theme') {
+          this.selectTheme(key).then(() => {
+            this.updateTableModes('milestone');
+            document.getElementById('milestonesContainer')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          });
+        } else if (level === 'milestone') {
+          this.selectMilestone(key).then(() => {
+            const tasksPanel = document.getElementById('hierarchyTasksContainer');
+            tasksPanel?.closest('.card')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          });
+        }
+      });
     });
 
     // Sync panel width class after render
@@ -2095,6 +2105,14 @@ class App {
         if (sparkline) return;
         if (e.target.classList.contains('issue-key') || e.target.classList.contains('git-dot') || e.target.classList.contains('table-detail-btn') || e.target.classList.contains('devqa-clickable') || e.target.classList.contains('editable-field') || e.target.closest('.editable-field')) return;
         this.selectEpic(row.dataset.key);
+      });
+
+      // Double-click: select epic + scroll to epic tasks panel
+      row.addEventListener('dblclick', (e) => {
+        if (e.target.closest('.sparkline-clickable, .editable-field, .table-detail-btn, .devqa-clickable, .issue-key')) return;
+        this.selectEpic(row.dataset.key).then(() => {
+          document.getElementById('epicTasksContainer')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
       });
     });
   }

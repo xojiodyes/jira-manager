@@ -655,7 +655,7 @@ const UI = {
     if (backdrop) backdrop.remove();
   },
 
-  showScopePopup(anchorEl, scopePoints) {
+  showScopePopup(anchorEl, scopePoints, issueKey) {
     this.hideScopePopup();
     if (!scopePoints || scopePoints.length < 2) return;
 
@@ -667,8 +667,15 @@ const UI = {
     const maxScope = Math.max(...scopePoints.map(p => p.childCount), 1);
     const normalizedPts = scopePoints.map(p => ({ date: p.date, progress: Math.round((p.childCount / maxScope) * 100) }));
 
+    // Backdrop to close on outside click
+    const backdrop = document.createElement('div');
+    backdrop.className = 'scope-popup-backdrop';
+    backdrop.addEventListener('click', () => this.hideScopePopup());
+    document.body.appendChild(backdrop);
+
     const popup = document.createElement('div');
     popup.className = 'scope-popup';
+    popup._scopeKey = issueKey;
     popup.innerHTML = `
       <div class="scope-popup-header">
         <span>Scope: <b>${lastS}</b> items</span>
@@ -676,15 +683,6 @@ const UI = {
       </div>
       ${this.renderSparkline(normalizedPts, null, 160, 40)}
     `;
-
-    // Keep popup alive on hover
-    popup.addEventListener('mouseenter', () => {
-      popup._keepAlive = true;
-    });
-    popup.addEventListener('mouseleave', () => {
-      popup._keepAlive = false;
-      this.hideScopePopup();
-    });
 
     document.body.appendChild(popup);
 
@@ -697,6 +695,8 @@ const UI = {
   hideScopePopup() {
     const existing = document.querySelector('.scope-popup');
     if (existing) existing.remove();
+    const backdrop = document.querySelector('.scope-popup-backdrop');
+    if (backdrop) backdrop.remove();
   },
 
   _fmtShortDate(dateStr) {
