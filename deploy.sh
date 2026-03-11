@@ -78,7 +78,8 @@ for src_file in "$DOWNLOADS_DIR"/*; do
 
   # Date filter: only today's files (by modification date)
   if ! $ALL_FILES; then
-    file_date=$(date -r "$src_file" +%Y-%m-%d 2>/dev/null || stat -c %y "$src_file" 2>/dev/null | cut -d' ' -f1)
+    # macOS: stat -f "%Sm" -t format; Linux: stat -c %y
+    file_date=$(stat -f "%Sm" -t "%Y-%m-%d" "$src_file" 2>/dev/null || stat -c %y "$src_file" 2>/dev/null | cut -d' ' -f1)
     if [ "$file_date" != "$TODAY" ]; then
       continue
     fi
