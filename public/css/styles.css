@@ -1373,6 +1373,24 @@ a:hover {
   vertical-align: middle;
 }
 
+/* Trend + Scope sparklines row in issue detail */
+.issue-sparklines-row {
+  display: flex;
+  gap: 32px;
+}
+
+.issue-sparkline-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.issue-sparkline-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* Editable Fields (Status & Confidence) */
 .editable-field {
   display: inline-flex;

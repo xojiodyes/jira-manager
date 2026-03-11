@@ -745,23 +745,52 @@ class App {
         ${UI.wikiToHtml(f.description)}
       </div>
 
-      <div class="issue-detail-section">
-        <h4>Details</h4>
-        <div class="issue-detail-meta">
-          <div class="issue-meta-item">
-            <span class="issue-meta-label">Project</span>
-            <span>${UI.escapeHtml(f.project?.name)}</span>
-          </div>
-          <div class="issue-meta-item">
-            <span class="issue-meta-label">Created</span>
-            <span>${UI.formatDate(f.created)}</span>
-          </div>
-          <div class="issue-meta-item">
-            <span class="issue-meta-label">Updated</span>
-            <span>${UI.formatDate(f.updated)}</span>
-          </div>
-        </div>
-      </div>
+      ${(() => {
+        const trendPts = this.progressHistory[issue.key] || [];
+        const scopePts = trendPts.filter(p => p.childCount != null);
+        if (trendPts.length === 0 && scopePts.length === 0) return '';
+
+        let trendHtml = '';
+        if (trendPts.length > 0) {
+          const last = trendPts[trendPts.length - 1].progress;
+          const first = trendPts[0].progress;
+          const delta = last - first;
+          const sign = delta > 0 ? '+' : '';
+          const color = delta > 0 ? '#36b37e' : delta < 0 ? '#ff5630' : '#97a0af';
+          trendHtml = `<div class="issue-sparkline-block">
+            <span class="issue-meta-label">Trend</span>
+            <div class="issue-sparkline-row">
+              ${UI.renderSparkline(trendPts, null, 140, 28)}
+              <span style="font-size:12px;font-weight:600">${last}%</span>
+              <span style="font-size:11px;color:${color}">${sign}${delta}</span>
+            </div>
+          </div>`;
+        }
+
+        let scopeHtml = '';
+        if (scopePts.length > 0) {
+          const lastS = scopePts[scopePts.length - 1].childCount;
+          const firstS = scopePts[0].childCount;
+          const deltaS = lastS - firstS;
+          const signS = deltaS > 0 ? '+' : '';
+          const colorS = deltaS > 0 ? '#ff5630' : deltaS < 0 ? '#36b37e' : '#97a0af';
+          const scopeDataPts = scopePts.map(p => ({ date: p.date, progress: p.childCount }));
+          const maxScope = Math.max(...scopePts.map(p => p.childCount), 1);
+          const normalizedPts = scopePts.map(p => ({ date: p.date, progress: Math.round((p.childCount / maxScope) * 100) }));
+          scopeHtml = `<div class="issue-sparkline-block">
+            <span class="issue-meta-label">Scope</span>
+            <div class="issue-sparkline-row">
+              ${UI.renderSparkline(normalizedPts, null, 140, 28)}
+              <span style="font-size:12px;font-weight:600">${lastS}</span>
+              ${deltaS !== 0 ? `<span style="font-size:11px;color:${colorS}">${signS}${deltaS}</span>` : ''}
+            </div>
+          </div>`;
+        }
+
+        return `<div class="issue-detail-section">
+          <div class="issue-sparklines-row">${trendHtml}${scopeHtml}</div>
+        </div>`;
+      })()}
 
       ${(() => {
         const devsByRole = this.developers[issue.key] || {};
