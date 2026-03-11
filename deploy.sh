@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # deploy.sh — Copy changed files from Downloads to two target project folders.
 #
 # Usage:
@@ -14,49 +14,41 @@ TARGET_1="/opt/jira-manager-1"
 TARGET_2="/opt/jira-manager-2"
 
 # ============================================================
-# Mapping: filename → relative path inside the project
-# ============================================================
-declare -A FILE_MAP=(
-  # Root-level files
-  ["server.js"]="server.js"
-  ["db.js"]="db.js"
-  ["mock-data.js"]="mock-data.js"
-  ["package.json"]="package.json"
-  ["config.example.json"]="config.example.json"
-  ["start.sh"]="start.sh"
-  ["start.bat"]="start.bat"
-  ["start-mock.sh"]="start-mock.sh"
-  ["deploy.sh"]="deploy.sh"
-
-  # public/
-  ["index.html"]="public/index.html"
-  ["styles.css"]="public/css/styles.css"
-  ["app.js"]="public/js/app.js"
-  ["api.js"]="public/js/api.js"
-  ["ui.js"]="public/js/ui.js"
-)
-
-# ============================================================
 DRY_RUN=false
-if [[ "$1" == "--dry-run" ]]; then
+if [ "$1" = "--dry-run" ]; then
   DRY_RUN=true
   echo "=== DRY RUN — no files will be copied ==="
   echo ""
 fi
 
-# Colors
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
-
 copied=0
 skipped=0
 errors=0
 
+# Filename → relative path mapping (portable, no associative arrays)
+get_rel_path() {
+  case "$1" in
+    server.js)            echo "server.js" ;;
+    db.js)                echo "db.js" ;;
+    mock-data.js)         echo "mock-data.js" ;;
+    package.json)         echo "package.json" ;;
+    config.example.json)  echo "config.example.json" ;;
+    start.sh)             echo "start.sh" ;;
+    start.bat)            echo "start.bat" ;;
+    start-mock.sh)        echo "start-mock.sh" ;;
+    deploy.sh)            echo "deploy.sh" ;;
+    index.html)           echo "public/index.html" ;;
+    styles.css)           echo "public/css/styles.css" ;;
+    app.js)               echo "public/js/app.js" ;;
+    api.js)               echo "public/js/api.js" ;;
+    ui.js)                echo "public/js/ui.js" ;;
+    *)                    echo "" ;;
+  esac
+}
+
 # Check downloads dir
-if [[ ! -d "$DOWNLOADS_DIR" ]]; then
-  echo -e "${RED}ERROR: Downloads directory not found: $DOWNLOADS_DIR${NC}"
+if [ ! -d "$DOWNLOADS_DIR" ]; then
+  echo "ERROR: Downloads directory not found: $DOWNLOADS_DIR"
   exit 1
 fi
 
@@ -65,47 +57,44 @@ echo "Target 1: $TARGET_1"
 echo "Target 2: $TARGET_2"
 echo ""
 
-# Find all files in downloads dir (flat or nested)
-while IFS= read -r src_file; do
-  basename=$(basename "$src_file")
+# Find all files in downloads dir
+find "$DOWNLOADS_DIR" -type f \( -name "*.js" -o -name "*.html" -o -name "*.css" -o -name "*.json" -o -name "*.sh" -o -name "*.bat" \) ! -name ".*" | while read -r src_file; do
+  fname=$(basename "$src_file")
+  rel_path=$(get_rel_path "$fname")
 
-  # Look up the relative path from FILE_MAP
-  rel_path="${FILE_MAP[$basename]}"
-
-  if [[ -z "$rel_path" ]]; then
-    # Not in map — try to use relative path from downloads dir
-    rel_path="${src_file#$DOWNLOADS_DIR/}"
+  if [ -z "$rel_path" ]; then
+    # Not in map — use relative path from downloads dir
+    rel_path=$(echo "$src_file" | sed "s|^$DOWNLOADS_DIR/||")
   fi
 
   for target in "$TARGET_1" "$TARGET_2"; do
     dest="$target/$rel_path"
     dest_dir=$(dirname "$dest")
 
-    if [[ ! -d "$target" ]]; then
-      echo -e "  ${YELLOW}SKIP${NC} $target (dir not found)"
-      ((skipped++))
+    if [ ! -d "$target" ]; then
+      echo "  SKIP $target (dir not found)"
+      skipped=$((skipped + 1))
       continue
     fi
 
     if $DRY_RUN; then
-      echo -e "  ${GREEN}WOULD COPY${NC} $basename → $dest"
+      echo "  WOULD COPY $fname -> $dest"
     else
       mkdir -p "$dest_dir"
       if cp "$src_file" "$dest" 2>/dev/null; then
-        echo -e "  ${GREEN}OK${NC} $basename → $dest"
-        ((copied++))
+        echo "  OK   $fname -> $dest"
+        copied=$((copied + 1))
       else
-        echo -e "  ${RED}FAIL${NC} $basename → $dest"
-        ((errors++))
+        echo "  FAIL $fname -> $dest"
+        errors=$((errors + 1))
       fi
     fi
   done
-
-done < <(find "$DOWNLOADS_DIR" -type f \( -name "*.js" -o -name "*.html" -o -name "*.css" -o -name "*.json" -o -name "*.sh" -o -name "*.bat" \) ! -name ".*")
+done
 
 echo ""
 if $DRY_RUN; then
   echo "Dry run complete. Run without --dry-run to copy files."
 else
-  echo -e "Done. Copied: ${GREEN}$copied${NC}  Skipped: ${YELLOW}$skipped${NC}  Errors: ${RED}$errors${NC}"
+  echo "Done. Copied: $copied  Skipped: $skipped  Errors: $errors"
 fi
