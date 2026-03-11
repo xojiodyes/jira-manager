@@ -591,6 +591,27 @@ a:hover {
   box-shadow: 0 4px 16px rgba(0,0,0,0.15);
   font-size: 13px;
 }
+/* Scope popup (hover on Items count) */
+.scope-popup {
+  position: fixed;
+  z-index: 1000;
+  background: #fff;
+  border: 1px solid #dfe1e6;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.scope-popup-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.scope-hoverable {
+  cursor: default;
+}
+
 /* Git activity dot */
 .git-dot {
   display: inline-block;
@@ -1373,22 +1394,41 @@ a:hover {
   vertical-align: middle;
 }
 
-/* Trend + Scope sparklines row in issue detail */
-.issue-sparklines-row {
+/* Trend + Scope charts in issue detail */
+.issue-charts-section {
   display: flex;
-  gap: 32px;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.issue-sparkline-block {
+.issue-chart-block {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.issue-sparkline-row {
+.issue-chart-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 8px;
+}
+
+.issue-chart-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #172b4d;
+}
+
+.detail-chart {
+  width: 100%;
+  max-width: 420px;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  background: #fafbfc;
+}
+
+.detail-chart circle:hover {
+  opacity: 1 !important;
 }
 
 /* Editable Fields (Status & Confidence) */
@@ -1567,25 +1607,6 @@ tr:hover .table-detail-btn {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   color: var(--color-text-secondary);
-}
-
-/* Keyboard navigation highlight */
-.hierarchy-row.kb-highlight {
-  outline: 2px solid var(--color-primary);
-  outline-offset: -2px;
-}
-
-tr.kb-highlight td {
-  outline: none;
-  box-shadow: inset 0 2px 0 0 var(--color-primary), inset 0 -2px 0 0 var(--color-primary);
-}
-
-tr.kb-highlight td:first-child {
-  box-shadow: inset 2px 2px 0 0 var(--color-primary), inset 0 -2px 0 0 var(--color-primary);
-}
-
-tr.kb-highlight td:last-child {
-  box-shadow: inset 0 2px 0 0 var(--color-primary), inset -2px -2px 0 0 var(--color-primary);
 }
 
 /* Epic row in tasks table */

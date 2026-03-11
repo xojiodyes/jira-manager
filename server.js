@@ -1857,6 +1857,44 @@ const server = http.createServer((req, res) => {
   serveStatic(req, res, filePath);
 });
 
+// ============================================================
+// NIGHTLY SCHEDULER — auto-run snapshot at configured time
+// ============================================================
+function scheduleNightly() {
+  const hh = 2, mm = 0;  // Run at 02:00
+  const mode = 'all';     // Both trend + git
+
+  function msUntilNext() {
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(hh, mm, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    return next - now;
+  }
+
+  function tick() {
+    const delay = msUntilNext();
+    const nextDate = new Date(Date.now() + delay);
+    console.log(`[Schedule] Next snapshot at ${nextDate.toLocaleString()} (mode=${mode})`);
+    setTimeout(async () => {
+      if (snapshotState.running) {
+        console.log('[Schedule] Snapshot already running, skipping');
+      } else {
+        console.log(`[Schedule] Starting nightly snapshot (mode=${mode})`);
+        try {
+          await computeSnapshot('', mode);
+          console.log('[Schedule] Nightly snapshot complete');
+        } catch (err) {
+          console.error('[Schedule] Nightly snapshot error:', err.message);
+        }
+      }
+      tick(); // schedule next
+    }, delay);
+  }
+
+  tick();
+}
+
 // Initialize store and start server
 (async () => {
   try {
@@ -1878,5 +1916,8 @@ const server = http.createServer((req, res) => {
     console.log('│                                         │');
     console.log('└─────────────────────────────────────────┘');
     console.log('');
+
+    // Start nightly scheduler (only in real mode)
+    if (MODE === 'real') scheduleNightly();
   });
 })();

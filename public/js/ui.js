@@ -228,6 +228,92 @@ const UI = {
       <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="2" fill="${color}"/>
     </svg>`;
   },
+
+  /**
+   * Render a detailed area chart with date axis and grid.
+   * @param {Array} dataPoints - [{date, progress}, ...] where progress is 0-100
+   * @param {object} opts
+   * @param {string} opts.color - line/fill color
+   * @param {number} opts.maxY - max Y value (default 100)
+   * @param {string} opts.unit - suffix for Y labels (default '%')
+   * @param {boolean} opts.invertColor - if true, growth is red (for scope)
+   */
+  renderChart(dataPoints, opts = {}) {
+    if (!dataPoints || dataPoints.length < 2) return '';
+
+    const W = 420, H = 120;
+    const pad = { top: 8, right: 12, bottom: 22, left: 36 };
+    const cw = W - pad.left - pad.right;
+    const ch = H - pad.top - pad.bottom;
+    const color = opts.color || '#0052cc';
+    const maxY = opts.maxY || 100;
+    const unit = opts.unit || '%';
+
+    // Map data to pixel coords
+    const pts = dataPoints.map((d, i) => ({
+      x: pad.left + (i / (dataPoints.length - 1)) * cw,
+      y: pad.top + ch - (Math.min(d.progress, maxY) / maxY) * ch,
+      date: d.date,
+      val: d.progress
+    }));
+
+    const polyline = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const area = [
+      `${pad.left},${pad.top + ch}`,
+      ...pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`),
+      `${(pad.left + cw).toFixed(1)},${pad.top + ch}`
+    ].join(' ');
+
+    // Y-axis grid: 3-4 lines
+    const ySteps = maxY <= 10 ? Math.min(maxY, 4) : 4;
+    let gridLines = '';
+    for (let i = 0; i <= ySteps; i++) {
+      const val = Math.round((maxY / ySteps) * i);
+      const y = (pad.top + ch - (val / maxY) * ch).toFixed(1);
+      gridLines += `<line x1="${pad.left}" y1="${y}" x2="${W - pad.right}" y2="${y}" stroke="#e1e4e8" stroke-width="0.5"/>`;
+      gridLines += `<text x="${pad.left - 4}" y="${y}" text-anchor="end" fill="#8993a4" font-size="9" dominant-baseline="middle">${val}${unit}</text>`;
+    }
+
+    // X-axis date labels: show ~5 evenly spaced
+    const labelCount = Math.min(5, dataPoints.length);
+    let dateLabels = '';
+    for (let i = 0; i < labelCount; i++) {
+      const idx = Math.round(i * (dataPoints.length - 1) / (labelCount - 1));
+      const d = new Date(dataPoints[idx].date + 'T00:00:00');
+      const label = d.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+      const x = pts[idx].x;
+      dateLabels += `<text x="${x.toFixed(1)}" y="${H - 2}" text-anchor="middle" fill="#8993a4" font-size="9">${label}</text>`;
+    }
+
+    // Hover dots with titles
+    let dots = '';
+    // Only show every Nth point to avoid clutter
+    const step = Math.max(1, Math.floor(dataPoints.length / 15));
+    for (let i = 0; i < pts.length; i += step) {
+      const p = pts[i];
+      const d = new Date(p.date + 'T00:00:00');
+      const label = d.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+      dots += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="${color}" opacity="0">
+        <title>${label}: ${p.val}${unit}</title>
+      </circle>`;
+    }
+    // Always show last point
+    const lp = pts[pts.length - 1];
+    const ld = new Date(lp.date + 'T00:00:00');
+    const ll = ld.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+    dots += `<circle cx="${lp.x.toFixed(1)}" cy="${lp.y.toFixed(1)}" r="3" fill="${color}">
+      <title>${ll}: ${lp.val}${unit}</title>
+    </circle>`;
+
+    return `<svg class="detail-chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+      ${gridLines}
+      <polygon points="${area}" fill="${color}" opacity="0.08"/>
+      <polyline points="${polyline}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      ${dots}
+      ${dateLabels}
+    </svg>`;
+  },
+
   /**
    * Get git dot color based on last activity date freshness
    * @param {string|null} lastActivity - "YYYY-MM-DD" date string
@@ -567,6 +653,50 @@ const UI = {
     if (existing) existing.remove();
     const backdrop = document.querySelector('.devqa-popup-backdrop');
     if (backdrop) backdrop.remove();
+  },
+
+  showScopePopup(anchorEl, scopePoints) {
+    this.hideScopePopup();
+    if (!scopePoints || scopePoints.length < 2) return;
+
+    const lastS = scopePoints[scopePoints.length - 1].childCount;
+    const firstS = scopePoints[0].childCount;
+    const delta = lastS - firstS;
+    const sign = delta > 0 ? '+' : '';
+    const color = delta > 0 ? '#ff5630' : delta < 0 ? '#36b37e' : '#97a0af';
+    const maxScope = Math.max(...scopePoints.map(p => p.childCount), 1);
+    const normalizedPts = scopePoints.map(p => ({ date: p.date, progress: Math.round((p.childCount / maxScope) * 100) }));
+
+    const popup = document.createElement('div');
+    popup.className = 'scope-popup';
+    popup.innerHTML = `
+      <div class="scope-popup-header">
+        <span>Scope: <b>${lastS}</b> items</span>
+        ${delta !== 0 ? `<span style="color:${color};font-weight:600">${sign}${delta}</span>` : ''}
+      </div>
+      ${this.renderSparkline(normalizedPts, null, 160, 40)}
+    `;
+
+    // Keep popup alive on hover
+    popup.addEventListener('mouseenter', () => {
+      popup._keepAlive = true;
+    });
+    popup.addEventListener('mouseleave', () => {
+      popup._keepAlive = false;
+      this.hideScopePopup();
+    });
+
+    document.body.appendChild(popup);
+
+    // Position near anchor
+    const rect = anchorEl.getBoundingClientRect();
+    popup.style.left = (rect.left + rect.width / 2 - 90) + 'px';
+    popup.style.top = (rect.bottom + 6) + 'px';
+  },
+
+  hideScopePopup() {
+    const existing = document.querySelector('.scope-popup');
+    if (existing) existing.remove();
   },
 
   _fmtShortDate(dateStr) {

@@ -21,10 +21,6 @@ class App {
     this.jqlFilters = []; // [{ name, jql }]
     this.selectedJqlIndex = -1; // -1 = no filter
 
-    // Keyboard navigation
-    this.activePanel = 'themes';
-    this.highlightedIndex = { themes: 0, milestones: -1, tasks: -1, epicTasks: -1 };
-
     // Progress history for sparklines
     this.progressHistory = {}; // { "KEY": [{ date, progress }, ...] }
     // Git activity data per issue
@@ -70,12 +66,29 @@ class App {
       this.progressHistory = this._transformSnapshots(data.snapshots || {});
       this.gitActivity = data.gitActivity || {};
       this.developers = data.developers || {};
+      // Update button tooltips with last run date
+      this._updateSnapshotTooltips(data.lastRun);
     } catch (err) {
       console.error('Failed to load progress history:', err);
       this.progressHistory = {};
       this.gitActivity = {};
       this.developers = {};
     }
+  }
+
+  _updateSnapshotTooltips(lastRun) {
+    const trendBtn = document.getElementById('snapshotTrendBtn');
+    const gitBtn = document.getElementById('snapshotGitBtn');
+    if (!lastRun) {
+      if (trendBtn) trendBtn.title = 'Snapshot progress trends (never run)';
+      if (gitBtn) gitBtn.title = 'Snapshot git activity (never run)';
+      return;
+    }
+    const d = new Date(lastRun);
+    const fmt = d.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
+      + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    if (trendBtn) trendBtn.title = `Snapshot progress trends\nLast run: ${fmt}`;
+    if (gitBtn) gitBtn.title = `Snapshot git activity\nLast run: ${fmt}`;
   }
 
   _transformSnapshots(snapshots) {
@@ -527,7 +540,33 @@ class App {
       });
     });
 
-    // ESC/ArrowLeft to close modals + keyboard navigation
+    // Scope sparkline popup on hover over Items count
+    let scopePopupTimer = null;
+    document.addEventListener('mouseover', (e) => {
+      const el = e.target.closest('.scope-hoverable');
+      if (!el) return;
+      const key = el.dataset.key;
+      if (!key) return;
+      const pts = (this.progressHistory[key] || []).filter(p => p.childCount != null);
+      if (pts.length < 2) return;
+
+      clearTimeout(scopePopupTimer);
+      scopePopupTimer = setTimeout(() => {
+        UI.showScopePopup(el, pts);
+      }, 300);
+    });
+    document.addEventListener('mouseout', (e) => {
+      const el = e.target.closest('.scope-hoverable');
+      if (el) {
+        clearTimeout(scopePopupTimer);
+        setTimeout(() => {
+          const popup = document.querySelector('.scope-popup');
+          if (!popup || !popup._keepAlive) UI.hideScopePopup();
+        }, 200);
+      }
+    });
+
+    // ESC to close modals / popups
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         // Close devqa popup first if open
@@ -553,16 +592,7 @@ class App {
           modal.classList.remove('active');
         });
         e.preventDefault();
-        return;
       }
-      if (e.key === 'ArrowLeft' && document.querySelector('.modal.active')) {
-        document.querySelectorAll('.modal.active').forEach(modal => {
-          modal.classList.remove('active');
-        });
-        e.preventDefault();
-        return;
-      }
-      this.handleKeyboardNav(e);
     });
   }
 
@@ -751,44 +781,45 @@ class App {
         if (trendPts.length === 0 && scopePts.length === 0) return '';
 
         let trendHtml = '';
-        if (trendPts.length > 0) {
+        if (trendPts.length >= 2) {
           const last = trendPts[trendPts.length - 1].progress;
           const first = trendPts[0].progress;
           const delta = last - first;
           const sign = delta > 0 ? '+' : '';
-          const color = delta > 0 ? '#36b37e' : delta < 0 ? '#ff5630' : '#97a0af';
-          trendHtml = `<div class="issue-sparkline-block">
-            <span class="issue-meta-label">Trend</span>
-            <div class="issue-sparkline-row">
-              ${UI.renderSparkline(trendPts, null, 140, 28)}
-              <span style="font-size:12px;font-weight:600">${last}%</span>
-              <span style="font-size:11px;color:${color}">${sign}${delta}</span>
+          const color = delta > 0 ? '#36b37e' : delta < 0 ? '#ff5630' : '#0052cc';
+          trendHtml = `<div class="issue-chart-block">
+            <div class="issue-chart-header">
+              <span class="issue-meta-label">Trend</span>
+              <span class="issue-chart-value">${last}%
+                <span style="color:${color};font-size:11px">${sign}${delta}</span>
+              </span>
             </div>
+            ${UI.renderChart(trendPts, { color: '#0052cc' })}
           </div>`;
         }
 
         let scopeHtml = '';
-        if (scopePts.length > 0) {
+        if (scopePts.length >= 2) {
           const lastS = scopePts[scopePts.length - 1].childCount;
           const firstS = scopePts[0].childCount;
           const deltaS = lastS - firstS;
           const signS = deltaS > 0 ? '+' : '';
           const colorS = deltaS > 0 ? '#ff5630' : deltaS < 0 ? '#36b37e' : '#97a0af';
-          const scopeDataPts = scopePts.map(p => ({ date: p.date, progress: p.childCount }));
           const maxScope = Math.max(...scopePts.map(p => p.childCount), 1);
-          const normalizedPts = scopePts.map(p => ({ date: p.date, progress: Math.round((p.childCount / maxScope) * 100) }));
-          scopeHtml = `<div class="issue-sparkline-block">
-            <span class="issue-meta-label">Scope</span>
-            <div class="issue-sparkline-row">
-              ${UI.renderSparkline(normalizedPts, null, 140, 28)}
-              <span style="font-size:12px;font-weight:600">${lastS}</span>
-              ${deltaS !== 0 ? `<span style="font-size:11px;color:${colorS}">${signS}${deltaS}</span>` : ''}
+          const scopeDataForChart = scopePts.map(p => ({ date: p.date, progress: p.childCount }));
+          scopeHtml = `<div class="issue-chart-block">
+            <div class="issue-chart-header">
+              <span class="issue-meta-label">Scope</span>
+              <span class="issue-chart-value">${lastS} items
+                ${deltaS !== 0 ? `<span style="color:${colorS};font-size:11px">${signS}${deltaS}</span>` : ''}
+              </span>
             </div>
+            ${UI.renderChart(scopeDataForChart, { color: '#6554c0', maxY: maxScope, unit: '' })}
           </div>`;
         }
 
-        return `<div class="issue-detail-section">
-          <div class="issue-sparklines-row">${trendHtml}${scopeHtml}</div>
+        return `<div class="issue-detail-section issue-charts-section">
+          ${trendHtml}${scopeHtml}
         </div>`;
       })()}
 
@@ -930,22 +961,9 @@ class App {
       // Async: load average State (2 levels deep: theme → milestones → tasks)
       this._loadThemeStates(data.issues, container);
 
-      // Keyboard: highlight first theme and auto-select it with full cascade
-      this.activePanel = 'themes';
-      this.highlightedIndex.themes = data.issues.length > 0 ? 0 : -1;
-      this.applyHighlight('themes');
+      // Auto-select first theme
       if (data.issues.length > 0) {
-        this._kbStayInPanel = 'themes';
-        this._kbGeneration = (this._kbGeneration || 0) + 1;
-        const gen = this._kbGeneration;
-        this.selectTheme(data.issues[0].key).then(async () => {
-          if (gen !== this._kbGeneration) return;
-          await this._cascadeSelectFirst('milestones');
-          if (gen !== this._kbGeneration) return;
-          this.activePanel = 'themes';
-          this.applyHighlight('themes');
-          this._kbStayInPanel = null;
-        });
+        this.selectTheme(data.issues[0].key);
       }
     } catch (err) {
       container.innerHTML = UI.renderError(err.message);
@@ -1026,13 +1044,6 @@ class App {
 
       // Async: load State = avg of children's computed states
       this._loadMilestoneStates(data.issues, milestonesContainer);
-
-      // Keyboard: highlight first milestone
-      this.highlightedIndex.milestones = data.issues.length > 0 ? 0 : -1;
-      if (!this._kbStayInPanel) {
-        this.activePanel = 'milestones';
-        this.applyHighlight('milestones');
-      }
     } catch (err) {
       milestonesContainer.classList.remove('loading-overlay');
       milestonesContainer.innerHTML = UI.renderError(err.message);
@@ -1094,13 +1105,6 @@ class App {
 
       // Async: fetch Epic Link child counts for epics and update badges
       this._loadEpicChildData(data.issues, tasksContainer);
-
-      // Keyboard: highlight first task
-      this.highlightedIndex.tasks = data.issues.length > 0 ? 0 : -1;
-      if (!this._kbStayInPanel) {
-        this.activePanel = 'tasks';
-        this.applyHighlight('tasks');
-      }
     } catch (err) {
       tasksContainer.classList.remove('loading-overlay');
       tasksContainer.innerHTML = UI.renderError(err.message);
@@ -1453,7 +1457,7 @@ class App {
             <span class="hierarchy-state" data-state-key="${issue.key}">${stateBadge}</span>
             <a href="${jiraAPI.getIssueUrl(issue.key)}" target="_blank" class="issue-key" onclick="event.stopPropagation()" title="Open in Jira">${issue.key}</a>
             <span class="hierarchy-summary">${UI.escapeHtml(f.summary)}</span>
-            <span class="hierarchy-items-count" title="Child items">${childCount}</span>
+            <span class="hierarchy-items-count scope-hoverable" data-key="${issue.key}" title="Child items">${childCount}</span>
             <span class="hierarchy-devqa-count devqa-clickable" data-key="${issue.key}">${this._getDevQaInfo(issue.key).count || ''}</span>
             <span class="hierarchy-sp-count">${f.story_points ?? f.customfield_10002 ?? ''}</span>
             <span class="hierarchy-edit editable-field editable-status" data-key="${issue.key}" data-field="status">${this.getLocalField(issue.key, 'status') !== null ? this.getLocalField(issue.key, 'status') + '%' : '—'}</span>
@@ -1770,13 +1774,6 @@ class App {
       countEl.textContent = mergedIssues.length > 0 ? mergedIssues.length : '';
 
       this.renderHierarchyTasks(container, mergedIssues, 'epicSubTasks');
-
-      // Keyboard: highlight first epic task
-      this.highlightedIndex.epicTasks = mergedIssues.length > 0 ? 0 : -1;
-      if (!this._kbStayInPanel) {
-        this.activePanel = 'epicTasks';
-        this.applyHighlight('epicTasks');
-      }
     } catch (err) {
       container.classList.remove('loading-overlay');
       container.innerHTML = UI.renderError(err.message);
@@ -2016,7 +2013,7 @@ class App {
       }
 
       if (showItemsCount) {
-        html += `<td class="items-count-cell"><span class="hierarchy-items-count" title="Child items">${childCount || ''}</span></td>`;
+        html += `<td class="items-count-cell"><span class="hierarchy-items-count scope-hoverable" data-key="${issue.key}" title="Child items">${childCount || ''}</span></td>`;
         const dq = this._getDevQaInfo(issue.key);
         html += `<td class="items-count-cell"><span class="devqa-clickable" data-key="${issue.key}">${dq.count || ''}</span></td>`;
       }
@@ -2101,10 +2098,6 @@ class App {
       });
     });
   }
-  // === KEYBOARD NAVIGATION ===
-
-  static PANELS = ['themes', 'milestones', 'tasks', 'epicTasks'];
-
   static STATUS_PROGRESS_MAP = {
     'open': 0, 'to do': 0, 'backlog': 0, 'new': 0, 'reopened': 0,
     'in development': 20, 'in progress': 20, 'dev': 20, 'in review': 20, 'review': 20, 'code review': 20,
@@ -2134,182 +2127,13 @@ class App {
     return d.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
   }
 
-  static PANEL_CONFIG = {
-    themes:     { containerId: 'themesContainer',         rowSelector: '.hierarchy-row' },
-    milestones: { containerId: 'milestonesContainer',     rowSelector: '.hierarchy-row' },
-    tasks:      { containerId: 'hierarchyTasksContainer', rowSelector: 'tr[data-key]' },
-    epicTasks:  { containerId: 'epicTasksContainer',      rowSelector: 'tr[data-key]' }
-  };
-
-  getPanelRows(panel) {
-    const cfg = App.PANEL_CONFIG[panel];
-    const container = document.getElementById(cfg.containerId);
-    return container ? Array.from(container.querySelectorAll(cfg.rowSelector)) : [];
-  }
-
-  applyHighlight(panel) {
-    // Remove highlights from ALL panels
-    for (const p of App.PANELS) {
-      this.getPanelRows(p).forEach(r => r.classList.remove('kb-highlight'));
-    }
-    // Apply highlight in the active panel
-    const rows = this.getPanelRows(panel);
-    const idx = this.highlightedIndex[panel];
-    if (idx >= 0 && idx < rows.length) {
-      rows[idx].classList.add('kb-highlight');
-      rows[idx].scrollIntoView({ block: 'nearest' });
-    }
-  }
-
-  getHighlightedKey(panel) {
-    const rows = this.getPanelRows(panel);
-    const idx = this.highlightedIndex[panel];
-    if (idx >= 0 && idx < rows.length) {
-      return rows[idx].dataset.key;
-    }
-    return null;
-  }
-
-  handleKeyboardNav(e) {
-    // Ignore if modal is open or focus is on input
-    if (document.querySelector('.modal.active')) return;
-    const tag = document.activeElement?.tagName;
-    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-
-    const panel = this.activePanel;
-    const rows = this.getPanelRows(panel);
-    if (rows.length === 0 && e.key !== 'ArrowLeft') return;
-
-    switch (e.key) {
-      case 'ArrowDown': {
-        e.preventDefault();
-        const max = rows.length - 1;
-        this.highlightedIndex[panel] = Math.min((this.highlightedIndex[panel] ?? -1) + 1, max);
-        this.applyHighlight(panel);
-        this._autoSelectPanel(panel);
-        break;
-      }
-      case 'ArrowUp': {
-        e.preventDefault();
-        this.highlightedIndex[panel] = Math.max((this.highlightedIndex[panel] ?? 0) - 1, 0);
-        this.applyHighlight(panel);
-        this._autoSelectPanel(panel);
-        break;
-      }
-      case 'ArrowRight': {
-        e.preventDefault();
-        const panelIdxR = App.PANELS.indexOf(panel);
-        if (panelIdxR < App.PANELS.length - 1) {
-          // For tasks→epicTasks, only allow if current row is an epic
-          if (panel === 'tasks') {
-            const row = rows[this.highlightedIndex[panel]];
-            if (!row || !row.classList.contains('epic-row')) break;
-          }
-          const nextPanel = App.PANELS[panelIdxR + 1];
-          const nextRows = this.getPanelRows(nextPanel);
-          if (nextRows.length > 0) {
-            this.activePanel = nextPanel;
-            if (this.highlightedIndex[nextPanel] < 0) {
-              this.highlightedIndex[nextPanel] = 0;
-            }
-            this.applyHighlight(this.activePanel);
-          }
-        }
-        break;
-      }
-      case 'ArrowLeft': {
-        e.preventDefault();
-        const panelIdx = App.PANELS.indexOf(panel);
-        if (panelIdx > 0) {
-          this.activePanel = App.PANELS[panelIdx - 1];
-          this.applyHighlight(this.activePanel);
-        }
-        break;
-      }
-      case 'Enter': {
-        e.preventDefault();
-        // Start quick-edit flow: Enter → Status% → Enter → Confidence% → Enter → next row → Status% ...
-        const rows2 = this.getPanelRows(panel);
-        const idx2 = this.highlightedIndex[panel];
-        if (idx2 >= 0 && idx2 < rows2.length) {
-          const statusField = rows2[idx2].querySelector('.editable-field.editable-status');
-          if (statusField) {
-            this._startQuickEdit(statusField, panel, idx2);
-          }
-        }
-        break;
-      }
-    }
-  }
-
-  async _autoSelectPanel(panel) {
-    const key = this.getHighlightedKey(panel);
-    if (!key) return;
-    const stayPanel = panel;
-    // Use generation counter to handle rapid key presses
-    this._kbGeneration = (this._kbGeneration || 0) + 1;
-    const gen = this._kbGeneration;
-    this._kbStayInPanel = stayPanel;
-    try {
-      if (panel === 'themes') {
-        await this.selectTheme(key);
-        if (gen !== this._kbGeneration) return; // stale
-        await this._cascadeSelectFirst('milestones');
-      } else if (panel === 'milestones') {
-        await this.selectMilestone(key);
-        if (gen !== this._kbGeneration) return; // stale
-        await this._cascadeSelectFirst('tasks');
-      } else if (panel === 'tasks') {
-        const rows = this.getPanelRows(panel);
-        const row = rows[this.highlightedIndex[panel]];
-        if (row && row.classList.contains('epic-row')) {
-          await this.selectEpic(key);
-        }
-      }
-    } finally {
-      // Only restore if this is still the latest generation
-      if (gen === this._kbGeneration) {
-        this.activePanel = stayPanel;
-        this.applyHighlight(stayPanel);
-        this._kbStayInPanel = null;
-      }
-    }
-  }
-
-  async _cascadeSelectFirst(panel) {
-    const rows = this.getPanelRows(panel);
-    if (rows.length === 0) return;
-    this.highlightedIndex[panel] = 0;
-    const key = rows[0].dataset.key;
-    if (!key) return;
-
-    // Preserve focused panel during cascade — don't let child selection switch table modes
-    const savedFocus = this.focusedPanel;
-
-    if (panel === 'milestones') {
-      await this.selectMilestone(key);
-      // Continue cascade into tasks
-      await this._cascadeSelectFirst('tasks');
-    } else if (panel === 'tasks') {
-      // If first task is an epic, auto-select it to load epic tasks
-      const row = rows[0];
-      if (row && row.classList.contains('epic-row')) {
-        await this.selectEpic(key);
-      }
-    }
-
-    // Restore focused panel after cascade
-    if (savedFocus) this.updateTableModes(savedFocus);
-  }
-
   // === INLINE EDITING ===
 
   /**
    * Start inline edit on an editable field element.
    * @param {HTMLElement} el - the .editable-field span
-   * @param {Function} [onNext] - called after successful save via Enter (for quick-edit chain)
    */
-  startInlineEdit(el, onNext) {
+  startInlineEdit(el) {
     // Prevent double editing
     if (el.querySelector('input')) return;
 
@@ -2372,9 +2196,7 @@ class App {
         e.stopPropagation();
         handled = true;
         input.removeEventListener('blur', handleBlur);
-        save().then(ok => {
-          if (ok && onNext) onNext();
-        });
+        save();
       }
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -2383,37 +2205,6 @@ class App {
         input.removeEventListener('blur', handleBlur);
         cancel();
       }
-    });
-  }
-
-  /**
-   * Quick-edit flow: Enter → Status% → Enter → Confidence% → Enter → next row Status% → ...
-   */
-  _startQuickEdit(statusEl, panel, rowIdx) {
-    this.startInlineEdit(statusEl, () => {
-      // After saving status, move to confidence of same row
-      const rows = this.getPanelRows(panel);
-      if (rowIdx < 0 || rowIdx >= rows.length) return;
-      const row = rows[rowIdx];
-      const confEl = row.querySelector('.editable-field.editable-confidence');
-      if (!confEl) return;
-
-      this.startInlineEdit(confEl, () => {
-        // After saving confidence, advance to next row
-        const nextIdx = rowIdx + 1;
-        const currentRows = this.getPanelRows(panel);
-        if (nextIdx >= currentRows.length) return; // last row — exit
-
-        // Move highlight to next row
-        this.highlightedIndex[panel] = nextIdx;
-        this.applyHighlight(panel);
-
-        const nextRow = currentRows[nextIdx];
-        const nextStatusEl = nextRow.querySelector('.editable-field.editable-status');
-        if (nextStatusEl) {
-          this._startQuickEdit(nextStatusEl, panel, nextIdx);
-        }
-      });
     });
   }
 
