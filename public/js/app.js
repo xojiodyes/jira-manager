@@ -1427,7 +1427,7 @@ class App {
       return;
     }
 
-    const isSimplified = this.focusedPanel && this.focusedPanel !== level;
+    const isSimplified = this.focusedPanel && this.focusedPanel !== 'both' && this.focusedPanel !== level;
     let html = `<div class="hierarchy-list${isSimplified ? ' simplified' : ''}" data-panel="${level}">
       <div class="hierarchy-list-header">
         <span class="hlh-detail"></span>
