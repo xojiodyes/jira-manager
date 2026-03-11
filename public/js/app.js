@@ -452,6 +452,15 @@ class App {
       this.updateTableModes('theme');
     });
 
+    // Re-evaluate detailed mode on window resize
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        this.updateTableModes(this.focusedPanel);
+      }, 150);
+    });
+
     // Snapshot buttons
     document.getElementById('snapshotTrendBtn').addEventListener('click', () => {
       this.startSnapshot('trend');
@@ -942,6 +951,8 @@ class App {
     document.getElementById('hierarchyTasksCount').textContent = '';
     this.resetEpicTasksPanel();
     this.updateTableModes('theme');
+    // Expand top row to full height when no milestone selected
+    document.querySelector('.hierarchy-row-top')?.classList.add('hierarchy-expanded');
 
     try {
       // Always filter by label "theme"; combine with selected JQL filter or server config
@@ -998,6 +1009,8 @@ class App {
     document.getElementById('hierarchyTasksContainer').innerHTML = UI.renderEmpty('📋', 'Select a Milestone');
     document.getElementById('hierarchyTasksCount').textContent = '';
     this.resetEpicTasksPanel();
+    // Re-expand top row (milestone cleared)
+    document.querySelector('.hierarchy-row-top')?.classList.add('hierarchy-expanded');
 
     // Load milestones linked to this theme
     const milestonesContainer = document.getElementById('milestonesContainer');
@@ -1059,6 +1072,8 @@ class App {
 
   async selectMilestone(issueKey) {
     this.selectedMilestoneKey = issueKey;
+    // Collapse top row to make room for tasks
+    document.querySelector('.hierarchy-row-top')?.classList.remove('hierarchy-expanded');
 
     // Highlight selected milestone
     document.querySelectorAll('#milestonesContainer .hierarchy-row').forEach(row => {
@@ -1544,33 +1559,41 @@ class App {
 
   _syncPanelWidths() {
     const panels = document.querySelectorAll('.hierarchy-row-top .hierarchy-panel');
+    const both = this.focusedPanel === 'both';
     if (panels.length >= 2) {
-      panels[0].classList.toggle('panel-simplified', this.focusedPanel !== 'theme');
-      panels[1].classList.toggle('panel-simplified', this.focusedPanel !== 'milestone');
+      panels[0].classList.toggle('panel-simplified', !both && this.focusedPanel !== 'theme');
+      panels[1].classList.toggle('panel-simplified', !both && this.focusedPanel !== 'milestone');
     }
   }
 
   // === TABLE MODE (detailed / simplified) ===
 
+  static WIDE_BREAKPOINT = 1800;
+
   updateTableModes(focusedPanel) {
+    // On wide screens, always show both detailed
+    if (window.innerWidth >= App.WIDE_BREAKPOINT) {
+      focusedPanel = 'both';
+    }
     this.focusedPanel = focusedPanel;
+    const bothDetailed = focusedPanel === 'both';
     document.querySelectorAll('.hierarchy-list[data-panel="theme"]').forEach(el => {
-      el.classList.toggle('simplified', focusedPanel !== 'theme');
+      el.classList.toggle('simplified', !bothDetailed && focusedPanel !== 'theme');
     });
     document.querySelectorAll('.hierarchy-list[data-panel="milestone"]').forEach(el => {
-      el.classList.toggle('simplified', focusedPanel !== 'milestone');
+      el.classList.toggle('simplified', !bothDetailed && focusedPanel !== 'milestone');
     });
     // Toggle panel width
     const panels = document.querySelectorAll('.hierarchy-row-top .hierarchy-panel');
     if (panels.length >= 2) {
-      panels[0].classList.toggle('panel-simplified', focusedPanel !== 'theme');
-      panels[1].classList.toggle('panel-simplified', focusedPanel !== 'milestone');
+      panels[0].classList.toggle('panel-simplified', !bothDetailed && focusedPanel !== 'theme');
+      panels[1].classList.toggle('panel-simplified', !bothDetailed && focusedPanel !== 'milestone');
     }
-    // Show only the relevant arrow button
+    // Arrow buttons: hide both in 'both' mode
     const toMs = document.getElementById('focusMilestonesBtn');
     const toTh = document.getElementById('focusThemesBtn');
-    if (toMs) toMs.style.display = focusedPanel === 'theme' ? '' : 'none';
-    if (toTh) toTh.style.display = focusedPanel === 'milestone' ? '' : 'none';
+    if (toMs) toMs.style.display = bothDetailed ? 'none' : focusedPanel === 'theme' ? '' : 'none';
+    if (toTh) toTh.style.display = bothDetailed ? 'none' : focusedPanel === 'milestone' ? '' : 'none';
   }
 
   // === CREATE FORMS ===
