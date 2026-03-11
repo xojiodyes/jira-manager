@@ -780,8 +780,15 @@ class App {
         const scopePts = trendPts.filter(p => p.childCount != null);
         if (trendPts.length === 0 && scopePts.length === 0) return '';
 
+        const hasTrend = trendPts.length >= 2;
+        const hasScope = scopePts.length >= 2;
+
+        // Compute shared date range across both datasets
+        const allDates = trendPts.map(p => p.date);
+        const dateRange = allDates.length >= 2 ? [allDates[0], allDates[allDates.length - 1]] : null;
+
         let trendHtml = '';
-        if (trendPts.length >= 2) {
+        if (hasTrend) {
           const last = trendPts[trendPts.length - 1].progress;
           const first = trendPts[0].progress;
           const delta = last - first;
@@ -794,12 +801,12 @@ class App {
                 <span style="color:${color};font-size:11px">${sign}${delta}</span>
               </span>
             </div>
-            ${UI.renderChart(trendPts, { color: '#0052cc' })}
+            ${UI.renderChart(trendPts, { color: '#0052cc', dateRange, hideXLabels: hasScope })}
           </div>`;
         }
 
         let scopeHtml = '';
-        if (scopePts.length >= 2) {
+        if (hasScope) {
           const lastS = scopePts[scopePts.length - 1].childCount;
           const firstS = scopePts[0].childCount;
           const deltaS = lastS - firstS;
@@ -814,7 +821,7 @@ class App {
                 ${deltaS !== 0 ? `<span style="color:${colorS};font-size:11px">${signS}${deltaS}</span>` : ''}
               </span>
             </div>
-            ${UI.renderChart(scopeDataForChart, { color: '#6554c0', maxY: maxScope, unit: '' })}
+            ${UI.renderChart(scopeDataForChart, { color: '#6554c0', maxY: maxScope, unit: '', dateRange })}
           </div>`;
         }
 

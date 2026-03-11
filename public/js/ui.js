@@ -231,37 +231,50 @@ const UI = {
 
   /**
    * Render a detailed area chart with date axis and grid.
-   * @param {Array} dataPoints - [{date, progress}, ...] where progress is 0-100
+   * @param {Array} dataPoints - [{date, progress}, ...]
    * @param {object} opts
    * @param {string} opts.color - line/fill color
    * @param {number} opts.maxY - max Y value (default 100)
    * @param {string} opts.unit - suffix for Y labels (default '%')
-   * @param {boolean} opts.invertColor - if true, growth is red (for scope)
+   * @param {string[]} opts.dateRange - shared date range [minDate, maxDate] for aligned X axis
+   * @param {boolean} opts.hideXLabels - hide X axis labels (for stacked charts, only bottom shows labels)
    */
   renderChart(dataPoints, opts = {}) {
     if (!dataPoints || dataPoints.length < 2) return '';
 
     const W = 420, H = 120;
-    const pad = { top: 8, right: 12, bottom: 22, left: 36 };
+    const pad = { top: 8, right: 12, bottom: opts.hideXLabels ? 6 : 22, left: 36 };
     const cw = W - pad.left - pad.right;
     const ch = H - pad.top - pad.bottom;
     const color = opts.color || '#0052cc';
     const maxY = opts.maxY || 100;
     const unit = opts.unit || '%';
 
-    // Map data to pixel coords
-    const pts = dataPoints.map((d, i) => ({
-      x: pad.left + (i / (dataPoints.length - 1)) * cw,
-      y: pad.top + ch - (Math.min(d.progress, maxY) / maxY) * ch,
-      date: d.date,
-      val: d.progress
-    }));
+    // Date range for X axis: use shared range or derive from data
+    const minDate = opts.dateRange
+      ? new Date(opts.dateRange[0] + 'T00:00:00').getTime()
+      : new Date(dataPoints[0].date + 'T00:00:00').getTime();
+    const maxDate = opts.dateRange
+      ? new Date(opts.dateRange[1] + 'T00:00:00').getTime()
+      : new Date(dataPoints[dataPoints.length - 1].date + 'T00:00:00').getTime();
+    const dateSpan = maxDate - minDate || 1;
+
+    // Map data to pixel coords using real date position
+    const pts = dataPoints.map(d => {
+      const t = new Date(d.date + 'T00:00:00').getTime();
+      return {
+        x: pad.left + ((t - minDate) / dateSpan) * cw,
+        y: pad.top + ch - (Math.min(d.progress, maxY) / maxY) * ch,
+        date: d.date,
+        val: d.progress
+      };
+    });
 
     const polyline = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
     const area = [
-      `${pad.left},${pad.top + ch}`,
+      `${pts[0].x.toFixed(1)},${pad.top + ch}`,
       ...pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`),
-      `${(pad.left + cw).toFixed(1)},${pad.top + ch}`
+      `${pts[pts.length - 1].x.toFixed(1)},${pad.top + ch}`
     ].join(' ');
 
     // Y-axis grid: 3-4 lines
@@ -274,20 +287,21 @@ const UI = {
       gridLines += `<text x="${pad.left - 4}" y="${y}" text-anchor="end" fill="#8993a4" font-size="9" dominant-baseline="middle">${val}${unit}</text>`;
     }
 
-    // X-axis date labels: show ~5 evenly spaced
-    const labelCount = Math.min(5, dataPoints.length);
+    // X-axis date labels: show ~5 evenly spaced across the date range
     let dateLabels = '';
-    for (let i = 0; i < labelCount; i++) {
-      const idx = Math.round(i * (dataPoints.length - 1) / (labelCount - 1));
-      const d = new Date(dataPoints[idx].date + 'T00:00:00');
-      const label = d.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
-      const x = pts[idx].x;
-      dateLabels += `<text x="${x.toFixed(1)}" y="${H - 2}" text-anchor="middle" fill="#8993a4" font-size="9">${label}</text>`;
+    if (!opts.hideXLabels) {
+      const labelCount = 5;
+      for (let i = 0; i < labelCount; i++) {
+        const t = minDate + (i / (labelCount - 1)) * dateSpan;
+        const d = new Date(t);
+        const label = d.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+        const x = pad.left + (i / (labelCount - 1)) * cw;
+        dateLabels += `<text x="${x.toFixed(1)}" y="${H - 2}" text-anchor="middle" fill="#8993a4" font-size="9">${label}</text>`;
+      }
     }
 
     // Hover dots with titles
     let dots = '';
-    // Only show every Nth point to avoid clutter
     const step = Math.max(1, Math.floor(dataPoints.length / 15));
     for (let i = 0; i < pts.length; i += step) {
       const p = pts[i];
