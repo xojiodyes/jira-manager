@@ -1336,6 +1336,17 @@ a:hover {
 .btn-icon:disabled:hover {
   background: var(--color-bg);
   color: var(--color-text-secondary);
+}
+
+.panel-nav-btn {
+  width: 24px;
+  height: 24px;
+  font-size: 13px;
+  border: none;
+  opacity: 0.5;
+}
+.panel-nav-btn:hover {
+  opacity: 1;
   border-color: var(--color-border);
 }
 

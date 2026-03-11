@@ -444,6 +444,14 @@ class App {
       this.exportTasks();
     });
 
+    // Panel focus toggle buttons (→ / ←)
+    document.getElementById('focusMilestonesBtn').addEventListener('click', () => {
+      this.updateTableModes('milestone');
+    });
+    document.getElementById('focusThemesBtn').addEventListener('click', () => {
+      this.updateTableModes('theme');
+    });
+
     // Snapshot buttons
     document.getElementById('snapshotTrendBtn').addEventListener('click', () => {
       this.startSnapshot('trend');
@@ -926,6 +934,7 @@ class App {
     document.getElementById('hierarchyTasksContainer').innerHTML = UI.renderEmpty('📋', 'Select a Milestone');
     document.getElementById('hierarchyTasksCount').textContent = '';
     this.resetEpicTasksPanel();
+    this.updateTableModes('theme');
 
     try {
       // Always filter by label "theme"; combine with selected JQL filter or server config
@@ -966,7 +975,6 @@ class App {
     this.selectedThemeKey = issueKey;
     this.selectedMilestoneKey = null;
     this.selectedMilestoneProject = null;
-    this.updateTableModes('theme');
 
     // Highlight selected theme
     document.querySelectorAll('#themesContainer .hierarchy-row').forEach(row => {
@@ -1044,7 +1052,6 @@ class App {
 
   async selectMilestone(issueKey) {
     this.selectedMilestoneKey = issueKey;
-    this.updateTableModes('milestone');
 
     // Highlight selected milestone
     document.querySelectorAll('#milestonesContainer .hierarchy-row').forEach(row => {
@@ -1505,21 +1512,19 @@ class App {
         }
       });
 
-      // Double-click: select + focus child panel (detailed mode + scroll)
+      // Double-click: toggle detailed mode between theme ↔ milestone
       row.addEventListener('dblclick', (e) => {
-        // Ignore interactive elements
         if (e.target.closest('.sparkline-clickable, .editable-field, .hierarchy-detail-btn, .devqa-clickable, .issue-key')) return;
-        const key = row.dataset.key;
         if (level === 'theme') {
-          this.selectTheme(key).then(() => {
-            this.updateTableModes('milestone');
+          const target = this.focusedPanel === 'theme' ? 'milestone' : 'theme';
+          this.updateTableModes(target);
+          if (target === 'milestone') {
             document.getElementById('milestonesContainer')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          });
+          }
         } else if (level === 'milestone') {
-          this.selectMilestone(key).then(() => {
-            const tasksPanel = document.getElementById('hierarchyTasksContainer');
-            tasksPanel?.closest('.card')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          });
+          if (this.focusedPanel !== 'milestone') {
+            this.updateTableModes('milestone');
+          }
         }
       });
     });
@@ -1554,6 +1559,11 @@ class App {
       panels[0].classList.toggle('panel-simplified', focusedPanel !== 'theme');
       panels[1].classList.toggle('panel-simplified', focusedPanel !== 'milestone');
     }
+    // Show only the relevant arrow button
+    const toMs = document.getElementById('focusMilestonesBtn');
+    const toTh = document.getElementById('focusThemesBtn');
+    if (toMs) toMs.style.display = focusedPanel === 'theme' ? '' : 'none';
+    if (toTh) toTh.style.display = focusedPanel === 'milestone' ? '' : 'none';
   }
 
   // === CREATE FORMS ===
